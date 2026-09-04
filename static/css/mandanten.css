@@ -1,0 +1,97 @@
+/* Firmen-Seite (mehrere Mandanten) + Umschalter in den Modulen */
+body.fc-shell #firmenPage.md-page{padding:24px 32px!important;max-width:none!important;margin:0!important}
+body.fc-shell .md-head h2{font-size:20px;font-weight:700;color:#fafafa;margin:0 0 4px;letter-spacing:-.01em}
+body.fc-shell .md-head p{font-size:12.5px;color:#71717a;margin:0 0 20px}
+
+body.fc-shell .md-table-wrap{background:#111;border:1px solid rgba(255,255,255,.07);border-radius:14px;overflow:hidden;margin-bottom:18px}
+body.fc-shell .md-table{width:100%;border-collapse:collapse}
+body.fc-shell .md-table th{text-align:left;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#71717a;font-weight:600;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.07)}
+body.fc-shell .md-table td{padding:13px 18px;font-size:13px;color:#a1a1aa;border-bottom:1px solid rgba(255,255,255,.05)}
+body.fc-shell .md-table tr:last-child td{border-bottom:none}
+body.fc-shell .md-name{color:#fafafa;font-weight:500}
+body.fc-shell .md-empty{padding:26px;text-align:center;font-size:12.5px;color:#71717a}
+body.fc-shell .md-badge{font-size:10.5px;padding:3px 9px;border-radius:20px;background:rgba(255,255,255,.06);color:#71717a}
+body.fc-shell .md-badge-green{background:rgba(16,185,129,.12);color:#10b981}
+
+body.fc-shell .md-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){body.fc-shell .md-cards{grid-template-columns:1fr}}
+body.fc-shell .md-card{background:#111;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px}
+body.fc-shell .md-card-title{font-size:14px;font-weight:600;color:#fafafa;margin-bottom:5px}
+body.fc-shell .md-card-sub{font-size:12px;color:#71717a;margin:0 0 14px;line-height:1.5}
+body.fc-shell .md-felder{display:flex;flex-direction:column;gap:11px;margin-bottom:14px}
+body.fc-shell .md-felder label{display:block;font-size:11.5px;color:#a1a1aa;margin-bottom:5px;font-weight:500}
+body.fc-shell .md-card input{width:100%;height:38px;background:#0d0d0d;border:1px solid rgba(255,255,255,.12);border-radius:9px;color:#fafafa;padding:0 11px;font-size:13px;font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .md-card input:focus{outline:none;border-color:#10b981}
+body.fc-shell .md-row{display:flex;gap:8px;align-items:center}
+body.fc-shell .md-btn{flex-shrink:0;background:transparent;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:9px 15px;color:#e4e4e7;font-size:12.5px;font-weight:600;cursor:pointer;font-family:'Inter',system-ui,sans-serif;transition:border-color .15s,color .15s}
+body.fc-shell .md-btn:hover{border-color:#10b981;color:#10b981}
+body.fc-shell .md-btn-green{background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.3);color:#10b981}
+body.fc-shell .md-btn-green:hover{background:rgba(16,185,129,.2)}
+body.fc-shell .md-btn-red{color:#f87171;border-color:rgba(248,113,113,.3);padding:6px 12px;font-size:12px}
+body.fc-shell .md-btn-red:hover{border-color:#f87171;color:#f87171}
+body.fc-shell .md-msg{font-size:12px;margin-top:9px;min-height:16px;color:#71717a}
+body.fc-shell .md-msg.ok{color:#10b981}
+body.fc-shell .md-msg.err{color:#f87171}
+
+/* Firmenauswahl als Feld in der Konfigurations-Spalte */
+body.fc-shell .md-switch .md-switch-sel{
+  width:100%;height:40px;background:#0d0d0d;border:1px solid rgba(255,255,255,.12);
+  border-radius:9px;color:#fafafa;padding:0 11px;font-size:13.5px;
+  font-family:'Inter',system-ui,sans-serif;
+}
+body.fc-shell .md-switch .md-switch-sel:focus{outline:none;border-color:#10b981}
+
+/* Gruppen-Auswahl (nur Superadmin) */
+body.fc-shell .md-gruppenwahl{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:#111;border:1px solid rgba(16,185,129,.25);border-radius:12px;
+  padding:12px 16px;margin-bottom:16px;
+}
+body.fc-shell .md-gruppenwahl label{font-size:12px;color:#a1a1aa;font-weight:600}
+body.fc-shell .md-gruppenwahl select{
+  height:36px;background:#0d0d0d;border:1px solid rgba(255,255,255,.12);border-radius:9px;
+  color:#fafafa;padding:0 11px;font-size:13px;min-width:240px;font-family:'Inter',system-ui,sans-serif;
+}
+body.fc-shell .md-gruppenwahl select:focus{outline:none;border-color:#10b981}
+body.fc-shell .md-hint{font-size:11.5px;color:#71717a}
+body.fc-shell .md-card select{
+  flex:1;height:38px;background:#0d0d0d;border:1px solid rgba(255,255,255,.12);
+  border-radius:9px;color:#fafafa;padding:0 11px;font-size:13px;font-family:'Inter',system-ui,sans-serif;
+}
+
+/* "verwalten" entfaellt - Mitarbeiter kommen aus der zentralen Verwaltung.
+   Wichtig: Der Zeitnachweis blendet den Knopf beim Neuzeichnen selbst wieder
+   ein, deshalb hier mit Vorrang ausblenden. */
+body.fc-shell #znStammVerwaltenBtn,
+body.fc-shell .md-verwalten-weg{ display: none !important; }
+
+/* Profil-Dialog je Betrieb */
+body.fc-shell #mdProfilHost{display:none;position:fixed;inset:0;z-index:9999}
+body.fc-shell .md-modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.65)}
+body.fc-shell .md-modal{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:100%;max-width:520px;max-height:88vh;overflow-y:auto;
+  background:#141414;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:22px 24px;
+}
+body.fc-shell .md-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+body.fc-shell .md-modal-title{font-size:17px;font-weight:700;color:#fafafa}
+body.fc-shell .md-modal .md-felder{display:flex;flex-direction:column;gap:13px;margin-top:4px}
+body.fc-shell .md-modal .md-felder label{display:block;font-size:11.5px;color:#a1a1aa;margin-bottom:5px;font-weight:500}
+body.fc-shell .md-modal input{
+  width:100%;height:40px;background:#0d0d0d;border:1px solid rgba(255,255,255,.12);
+  border-radius:9px;color:#fafafa;padding:0 12px;font-size:13.5px;font-family:'Inter',system-ui,sans-serif;
+}
+body.fc-shell .md-modal input:focus{outline:none;border-color:#10b981}
+body.fc-shell .md-modal input:disabled{opacity:.55;cursor:not-allowed}
+body.fc-shell .md-koord{font-size:11.5px;color:#71717a;font-family:'JetBrains Mono',monospace;margin-top:6px}
+body.fc-shell .md-warnung{
+  background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.28);border-radius:10px;
+  padding:11px 13px;margin-bottom:16px;font-size:12.5px;color:#fbbf24;line-height:1.5;
+}
+body.fc-shell .md-sperre{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);border-radius:10px;
+  padding:11px 13px;margin-bottom:16px;font-size:12.5px;color:#a1a1aa;line-height:1.5;
+}
+body.fc-shell .md-modal-aktionen{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+body.fc-shell .md-koord-paar{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:600px){body.fc-shell .md-koord-paar{grid-template-columns:1fr}}
