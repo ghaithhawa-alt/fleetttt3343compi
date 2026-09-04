@@ -476,12 +476,37 @@
   }
 
   /* Zahl am Menüpunkt aktuell halten - eine kleine Abfrage, kein WebSocket. */
+  var LETZTE_ZAHL = null;
+
   function zahlTicker() {
     fetch("/vorgaenge/anzahl", { headers: kopf() })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d && d.aktiv) sidebarZahl(d.offen || 0); })
+      .then(function (d) {
+        if (!d || !d.aktiv) return;
+        var n = d.offen || 0;
+        sidebarZahl(n);
+        // Hat ein Kollege etwas angelegt oder abgehakt, waehrend die Seite
+        // offen ist? Dann die Liste gleich mit nachladen - sonst sieht man
+        // die Aenderung erst beim naechsten Aufruf der Seite.
+        var seite = document.getElementById("vorgaengePage");
+        var sichtbar = seite && seite.style.display !== "none";
+        if (sichtbar && LETZTE_ZAHL !== null && n !== LETZTE_ZAHL) {
+          var dialogOffen = document.getElementById("vgBackdrop")
+            && document.getElementById("vgBackdrop").style.display === "block";
+          if (!dialogOffen) laden();     // niemandem den offenen Dialog wegziehen
+        }
+        LETZTE_ZAHL = n;
+      })
       .catch(function () {});
   }
+
+  /* Zurueck am Rechner: sofort nachsehen, statt bis zu 30 Sekunden zu warten. */
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible") return;
+    var seite = document.getElementById("vorgaengePage");
+    if (seite && seite.style.display !== "none") laden();
+    else zahlTicker();
+  });
 
   function init() {
     fetch("/me", { headers: kopf() })
