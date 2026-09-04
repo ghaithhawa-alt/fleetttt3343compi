@@ -1,0 +1,124 @@
+/* Zeitnachweis Auswahl-Ansicht - sauberer Neubau.
+   Greift nur, wenn zn-redesign.js die neue Ansicht einfuegt.
+   Betrifft AUSSCHLIESSLICH die Auswahl (Modus-Karten + Konfig),
+   nicht die Innenteile (Upload, Fahrerliste). */
+
+body.fc-shell #znNewChooser{ display:none; }
+body.fc-shell.zn-chooser-on #znNewChooser{ display:block; }
+/* Original-Auswahl + Original-Sidebar-Felder in diesem Zustand ausblenden */
+body.fc-shell.zn-chooser-on #zeitnachweisPage .fb-sidebar{ display:none !important; }
+body.fc-shell.zn-chooser-on #zeitnachweisPage .fb-layout{ display:block !important; }
+body.fc-shell.zn-chooser-on #znModusAuswahl{ display:none !important; }
+
+body.fc-shell #znNewChooser{
+  width:100%; max-width:760px; margin:0 auto; padding:44px 24px 48px;
+}
+/* Inhaltsbereich zentriert die Gruppe auch auf grossen Schirmen */
+body.fc-shell.zn-chooser-on #zeitnachweisPage .fb-main{
+  display:flex !important; justify-content:center !important;
+}
+body.fc-shell .znc-head{ text-align:center; margin-bottom:24px; }
+body.fc-shell .znc-head h2{
+  font-size:22px; font-weight:700; letter-spacing:-.02em; color:#fafafa; margin:0;
+}
+body.fc-shell .znc-head p{ font-size:13px; color:#71717a; margin:5px 0 0; }
+
+body.fc-shell .znc-cards{
+  display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;
+}
+body.fc-shell .znc-card{
+  border:1px solid rgba(255,255,255,.08); border-radius:16px;
+  padding:26px 22px; text-align:center; cursor:pointer; background:#111;
+  transition:border-color .18s, transform .18s, box-shadow .18s, background .18s;
+}
+body.fc-shell .znc-card:hover{
+  border-color:rgba(16,185,129,.35); transform:translateY(-3px);
+  box-shadow:0 16px 36px rgba(0,0,0,.4); background:#131313;
+}
+/* Beide Karten ruhig und gleich - Hervorhebung erst beim Ueberfahren (kein Dauerleuchten) */
+body.fc-shell .znc-ico{
+  width:46px; height:46px; border-radius:12px; margin:0 auto 14px;
+  background:rgba(16,185,129,.10); border:1px solid rgba(16,185,129,.22);
+  display:flex; align-items:center; justify-content:center;
+}
+body.fc-shell .znc-ico svg{ width:23px; height:23px; stroke:#10b981; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+body.fc-shell .znc-card h3{ font-size:16px; font-weight:600; color:#fafafa; margin:0 0 6px; }
+body.fc-shell .znc-card p{ font-size:12.5px; color:#a1a1aa; line-height:1.5; margin:0; }
+
+@media (max-width:640px){
+  body.fc-shell .znc-cards{ grid-template-columns:1fr; }
+}
+
+/* ── Upload-Klickflaeche: Datei-Feld deckt die GANZE Zone ab ──
+   (Ursache des Bugs: ohne feste Hoehe deckte das Feld nur den oberen Teil.) */
+body.fc-shell #zeitnachweisPage .upload-zone{ position: relative; }
+body.fc-shell #zeitnachweisPage .upload-zone input[type=file]{
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100% !important; height: 100% !important;
+  max-height: none !important; min-height: 0 !important;
+  margin: 0; padding: 0;
+  opacity: 0; cursor: pointer;
+  z-index: 2;
+}
+
+/* ── Stundenliste ein-/ausklappbar (Platz fuer die Schichttabelle) ── */
+body.fc-shell #zeitnachweisPage .zn-detail-layout{ position: relative; }
+body.fc-shell #zeitnachweisPage .zn-hours-toggle{
+  position: absolute; top: -2px; left: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #141414; border: 1px solid rgba(255,255,255,.12);
+  color: #a1a1aa; border-radius: 8px; padding: 6px 11px;
+  font-size: 11.5px; font-weight: 600; font-family: 'Inter',system-ui,sans-serif;
+  cursor: pointer; z-index: 6; transition: border-color .15s, color .15s;
+}
+body.fc-shell #zeitnachweisPage .zn-hours-toggle:hover{ border-color:#10b981; color:#10b981; }
+body.fc-shell #zeitnachweisPage .zn-hours-toggle svg{ width:14px; height:14px; transition:transform .2s; }
+/* eingeklappt: Stundenliste wird zu schmalem Streifen, Tabelle nimmt den Rest */
+body.fc-shell #zeitnachweisPage .zn-detail-layout{ align-items: start !important; }
+body.fc-shell #zeitnachweisPage .zn-detail-layout.zn-hours-off{ grid-template-columns: 1fr 34px !important; }
+body.fc-shell #zeitnachweisPage .zn-detail-layout.zn-hours-off .hours-card{
+  overflow: hidden !important; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center;
+  border-color: rgba(16,185,129,.18) !important;
+}
+body.fc-shell #zeitnachweisPage .zn-detail-layout.zn-hours-off .hours-card:hover{
+  background: rgba(16,185,129,.05) !important; border-color: rgba(16,185,129,.35) !important;
+}
+/* im Streifen: Kopf + Liste verstecken, senkrechte Beschriftung zeigen */
+body.fc-shell #zeitnachweisPage .zn-detail-layout.zn-hours-off .hours-card > *{ display: none !important; }
+body.fc-shell #zeitnachweisPage .zn-detail-layout.zn-hours-off .hours-card::after{
+  content: none !important;
+}
+body.fc-shell #zeitnachweisPage .zn-detail-layout.zn-hours-off .zn-hours-toggle svg{ transform:rotate(180deg); }
+
+/* Leerraum oben reduzieren - Tabellen nach oben ziehen (ohne Kopf-Umbau) */
+@media (min-width: 901px){
+  body.fc-shell #zeitnachweisPage.container{ padding-top: 12px !important; }
+}
+body.fc-shell #zeitnachweisPage .znc-head{ margin-top: 0 !important; }
+
+/* ── NUR OPTIK: Personalnummer-Feld schmaler + Buttons im Design ──
+   Keine Umstrukturierung des Kopfs - nur Groesse/Aussehen. */
+body.fc-shell #zeitnachweisPage .zn-form-pn input{
+  width: 110px !important;
+  height: 34px !important; min-height: 34px !important; max-height: 34px !important;
+  padding: 0 10px !important; font-size: 12.5px !important;
+  background: #0d0d0d !important; border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: 8px !important; color: #fafafa !important;
+}
+body.fc-shell #zeitnachweisPage .zn-saveload-btn{
+  height: 36px !important;
+  background: transparent !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  border-radius: 9px !important;
+  color: #e4e4e7 !important;
+  padding: 0 14px !important;
+  font-size: 13px !important; font-weight: 600 !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+body.fc-shell #zeitnachweisPage .zn-saveload-btn:hover{
+  border-color: #10b981 !important; color: #10b981 !important;
+}
