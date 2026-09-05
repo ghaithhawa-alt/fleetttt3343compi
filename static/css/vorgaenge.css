@@ -107,3 +107,56 @@ body.fc-shell .vg-schritt-geld{font-size:12.5px;color:#10b981;margin-top:2px;
 body.fc-shell .fc-side-zahl{margin-left:auto;background:#ef4444;color:#fff;font-size:10.5px;
   font-weight:700;min-width:18px;height:18px;line-height:18px;border-radius:9px;
   padding:0 5px;text-align:center;font-variant-numeric:tabular-nums}
+
+/* ── Reiter, Wochenübersicht, Stapel, Filter ─────────────────────── */
+body.fc-shell .vg-kopf-rechts{display:flex;align-items:center;gap:12px;flex-shrink:0}
+
+body.fc-shell .vg-reiter{display:flex;gap:4px;margin-bottom:16px;
+  border-bottom:1px solid rgba(255,255,255,.07)}
+body.fc-shell .vg-reiter-btn{background:none;border:none;border-bottom:2px solid transparent;
+  padding:8px 14px;color:#71717a;font-size:13px;font-weight:600;cursor:pointer;
+  font-family:'Inter',system-ui,sans-serif;margin-bottom:-1px}
+body.fc-shell .vg-reiter-btn:hover{color:#a1a1aa}
+body.fc-shell .vg-reiter-btn.on{color:#10b981;border-bottom-color:#10b981}
+
+body.fc-shell .vg-wochenkopf{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+body.fc-shell .vg-kw{font-size:15px;font-weight:600;color:#fafafa;min-width:110px;text-align:center}
+body.fc-shell .vg-kw-datum{font-size:12px;color:#71717a}
+
+body.fc-shell .vg-table-wrap{background:#111;border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;overflow-x:auto;margin-bottom:18px}
+body.fc-shell .vg-table{width:100%;border-collapse:collapse;min-width:560px}
+body.fc-shell .vg-table th{text-align:left;font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+  color:#71717a;font-weight:600;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+body.fc-shell .vg-table td{padding:11px 16px;font-size:13px;color:#a1a1aa;
+  border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
+body.fc-shell .vg-table tbody tr:last-child td{border-bottom:none}
+body.fc-shell .vg-table th.r,body.fc-shell .vg-table td.r{text-align:right}
+body.fc-shell .vg-table .vg-name{color:#fafafa;font-weight:500}
+body.fc-shell .vg-table .geld{font-variant-numeric:tabular-nums;white-space:nowrap}
+body.fc-shell .vg-table .minus{color:#ef4444}
+body.fc-shell .vg-table .plus{color:#10b981}
+body.fc-shell .vg-table tfoot td{border-top:1px solid rgba(255,255,255,.12);border-bottom:none;
+  font-weight:600;color:#fafafa;font-size:12.5px;background:rgba(255,255,255,.02)}
+body.fc-shell .vg-schon td{opacity:.5}
+
+body.fc-shell .vg-stapel-feld{width:120px;height:34px;background:#0d0d0d;
+  border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#fafafa;padding:0 10px;
+  font-size:13px;text-align:right;font-variant-numeric:tabular-nums;
+  font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .vg-stapel-feld:focus{outline:none;border-color:#10b981}
+body.fc-shell .vg-stapel-feld:disabled{opacity:.4}
+
+body.fc-shell .vg-filter{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+body.fc-shell .vg-filter input,body.fc-shell .vg-filter select{height:34px;background:#0d0d0d;
+  border:1px solid rgba(255,255,255,.12);border-radius:9px;color:#fafafa;padding:0 10px;
+  font-size:12.5px;font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .vg-filter input[type=search]{flex:1;min-width:180px}
+body.fc-shell .vg-filter input:focus,body.fc-shell .vg-filter select:focus{outline:none;border-color:#10b981}
+body.fc-shell .vg-treffer{float:right;font-size:10.5px;color:#10b981;text-transform:none;letter-spacing:0}
+
+body.fc-shell .vg-haken-rest{display:flex;align-items:flex-start;gap:9px;padding:11px 13px;
+  background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;
+  font-size:12.5px;color:#e4e4e7;cursor:pointer;line-height:1.45;margin-top:4px}
+body.fc-shell .vg-haken-rest input{margin-top:2px;accent-color:#f59e0b;flex-shrink:0}
+body.fc-shell .vg-haken-rest b{color:#f59e0b}

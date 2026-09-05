@@ -208,6 +208,8 @@ _NACHTRAEGLICHE_SPALTEN = [
     ("user", "mitarbeiter_id", "INTEGER"),
     ("user", "letzte_anmeldung", "TIMESTAMP"),
     ("firma", "max_benutzer", "INTEGER DEFAULT 1"),
+    ("vorgang", "periode", "VARCHAR DEFAULT ''"),
+    ("vorgang", "nachfolger_von", "INTEGER DEFAULT 0"),
 ]
 
 
@@ -350,6 +352,11 @@ class Vorgang(SQLModel, table=True):
     status: str = Field(default="offen", index=True)   # offen | erledigt
     ergebnis: str = ""                                 # komplett | teilweise
     faellig_am: Optional[date] = None
+
+    # Kalenderwoche beim Abkassieren, z.B. "2026-KW36". Leer bei allem anderen.
+    periode: str = Field(default="", index=True)
+    # Aus welchem Vorgang ist dieser als Restbetrag entstanden?
+    nachfolger_von: int = 0
 
     erstellt_von: int = 0
     erstellt_von_name: str = ""
@@ -3396,7 +3403,9 @@ def _cent(betrag) -> int:
 
 
 def _euro(cent: int) -> str:
-    return f"{(cent or 0) / 100:.2f}".replace(".", ",")
+    """Deutsche Schreibweise: 137540 -> "1.375,40"."""
+    text = f"{(cent or 0) / 100:,.2f}"          # 1,375.40
+    return text.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 
 
 def _vorgang_firma(current: User, session: Session, schreibend: bool = True) -> Firma:
@@ -3462,6 +3471,210 @@ def _vorgang_dict(v: Vorgang, ereignisse: Optional[list] = None) -> dict:
     return d
 
 
+"""Kalenderwochen und die Brücke zum Lohn-Modul.
+
+Das Lohn-Modul speichert pro Monat einen Datenblock:
+
+    {"drivers": [{"name": "...", "pct": 40, "lohnBrutto": 0,
+                  "wochen": [{"umsatz": 0, "trinkgeld": 0,
+                              "offen": 0, "anmerkung": ""}, ...]}],
+     "weekCount": 5}
+
+Das Feld "offen" einer Wochenzeile ist das Bargeld, das der Fahrer noch nicht
+abgegeben hat - genau der Betrag, um den es beim Abkassieren geht. Statt ihn
+abzutippen, wird er hier als Vorschlag geholt. Ändern kann man ihn trotzdem.
+"""
+
+_KW_MUSTER = re.compile(r"^(\d{4})-?KW\s?(\d{1,2})$", re.IGNORECASE)
+
+
+def _kw_text(d: date) -> str:
+    jahr, woche, _ = d.isocalendar()
+    return f"{jahr}-KW{woche:02d}"
+
+
+def _kw_montag(kw: str) -> date:
+    """'2026-KW36' -> Montag dieser Woche. Bei Unsinn: Montag dieser Woche."""
+    m = _KW_MUSTER.match((kw or "").strip())
+    if not m:
+        heute = date.today()
+        return heute - timedelta(days=heute.weekday())
+    try:
+        return date.fromisocalendar(int(m.group(1)), int(m.group(2)), 1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Ungültige Kalenderwoche: {kw}")
+
+
+def _lohn_wochenwerte(session: Session, firma_id: int, montag: date) -> dict:
+    """Liefert {Fahrername (klein): offen_in_cent} aus dem Lohn-Monat.
+
+    Welche Zeile im Monat? Der wievielte Montag der Monat hat, ist der Index -
+    der erste Montag ist Woche 1. Das ist eine Annahme; deshalb wird sie in der
+    Oberfläche mit angezeigt und der Betrag bleibt überschreibbar.
+    """
+    monat = montag.strftime("%Y-%m")
+    blob = _get_blob(session, firma_id, "lohn_monat", _safe_periode(monat))
+    if blob is None:
+        return {"monat": monat, "woche_nr": (montag.day - 1) // 7 + 1,
+                "gefunden": False, "werte": {}}
+    index = (montag.day - 1) // 7          # 0-basiert: erster Montag = 0
+    werte = {}
+    try:
+        daten = json.loads(blob.data)
+        for fahrer in (daten.get("drivers") or []):
+            name = (fahrer.get("name") or "").strip()
+            wochen = fahrer.get("wochen") or []
+            if not name or index >= len(wochen):
+                continue
+            offen = (wochen[index] or {}).get("offen")
+            if offen in (None, "", 0):
+                continue
+            werte[name.lower()] = _cent(offen)
+    except Exception:
+        return {"monat": monat, "woche_nr": index + 1, "gefunden": False, "werte": {}}
+    return {"monat": monat, "woche_nr": index + 1, "gefunden": True, "werte": werte}
+
+
+@app.get("/vorgaenge/wochenvorschlag")
+def wochenvorschlag(kw: str = "",
+                    current: User = Depends(get_wirk_user),
+                    session: Session = Depends(get_session)):
+    """Alle aktiven Fahrer einer Kalenderwoche, mit Betragsvorschlag aus dem Lohn.
+
+    Fahrer, für die es diese Woche schon einen Vorgang gibt, sind markiert -
+    so legt niemand versehentlich zweimal an.
+    """
+    firma = _vorgang_firma(current, session)
+    montag = _kw_montag(kw) if kw else (date.today() - timedelta(days=date.today().weekday()))
+    woche = _kw_text(montag)
+
+    lohn = _lohn_wochenwerte(session, firma.id, montag)
+    schon_da = {v.mitarbeiter_id: v.id for v in session.exec(
+        select(Vorgang).where(Vorgang.firma_id == firma.id,
+                              Vorgang.art == "fahrer_kassieren",
+                              Vorgang.periode == woche)).all()}
+
+    fahrer = [m for m in session.exec(
+        select(Mitarbeiter).where(Mitarbeiter.firma_id == firma.id)).all() if m.aktiv]
+    fahrer.sort(key=lambda m: m.name.lower())
+
+    return {
+        "kw": woche,
+        "von": montag.isoformat(),
+        "bis": (montag + timedelta(days=6)).isoformat(),
+        "lohn_monat": lohn["monat"],
+        "lohn_woche_nr": lohn["woche_nr"],
+        "lohn_gefunden": lohn["gefunden"],
+        "fahrer": [{
+            "mitarbeiter_id": m.id,
+            "name": m.name,
+            "vorschlag": _euro(lohn["werte"].get(m.name.strip().lower(), 0)),
+            "vorschlag_cent": lohn["werte"].get(m.name.strip().lower(), 0),
+            "schon_angelegt": m.id in schon_da,
+            "vorgang_id": schon_da.get(m.id),
+        } for m in fahrer],
+    }
+
+
+class StapelZeile(BaseModel):
+    mitarbeiter_id: int
+    betrag: Optional[str] = None
+
+
+class StapelRequest(BaseModel):
+    kw: str
+    zeilen: list
+    faellig_am: Optional[str] = None
+    hinweis: Optional[str] = None
+
+
+@app.post("/vorgaenge/stapel")
+def vorgaenge_stapel(data: StapelRequest,
+                     current: User = Depends(get_wirk_user),
+                     session: Session = Depends(get_session)):
+    """Legt für eine ganze Woche alle Abkassier-Vorgänge auf einmal an."""
+    firma = _vorgang_firma(current, session)
+    montag = _kw_montag(data.kw)
+    woche = _kw_text(montag)
+    faellig = _datum_oder_none(data.faellig_am) or (montag + timedelta(days=7))
+
+    vorhanden = {v.mitarbeiter_id for v in session.exec(
+        select(Vorgang).where(Vorgang.firma_id == firma.id,
+                              Vorgang.art == "fahrer_kassieren",
+                              Vorgang.periode == woche)).all()}
+
+    angelegt, uebersprungen = [], 0
+    for roh in (data.zeilen or []):
+        try:
+            zeile = StapelZeile(**roh) if isinstance(roh, dict) else roh
+        except Exception:
+            continue
+        if zeile.mitarbeiter_id in vorhanden:
+            uebersprungen += 1
+            continue
+        m = session.get(Mitarbeiter, zeile.mitarbeiter_id)
+        if m is None or m.firma_id != firma.id:
+            continue
+        cent = _cent(zeile.betrag)
+        if cent <= 0:
+            uebersprungen += 1      # ohne Betrag kein Auftrag
+            continue
+        v = Vorgang(firma_id=firma.id, art="fahrer_kassieren",
+                    schluessel=f"fahrer:{m.id}:{woche}",
+                    titel=f"{m.name} abkassieren ({woche})",
+                    mitarbeiter_id=m.id, mitarbeiter_name=m.name,
+                    betrag_soll_cent=cent, periode=woche, faellig_am=faellig,
+                    erstellt_von=current.id or 0, erstellt_von_name=_wer(current))
+        session.add(v)
+        try:
+            session.commit(); session.refresh(v)
+        except Exception:
+            session.rollback(); uebersprungen += 1; continue
+        _ereignis(session, v, current, "angelegt",
+                  (data.hinweis or "").strip() or f"Wochenabrechnung {woche}", cent)
+        session.commit()
+        angelegt.append(_vorgang_dict(v))
+        vorhanden.add(m.id)
+
+    return {"kw": woche, "angelegt": len(angelegt),
+            "uebersprungen": uebersprungen, "vorgaenge": angelegt}
+
+
+@app.get("/vorgaenge/woche")
+def vorgaenge_woche(kw: str = "",
+                    current: User = Depends(get_wirk_user),
+                    session: Session = Depends(get_session)):
+    """Das Montagsblatt: Wer hat abgerechnet, wer nicht, wo sind Differenzen."""
+    firma = _vorgang_firma(current, session, schreibend=False)
+    montag = _kw_montag(kw) if kw else (date.today() - timedelta(days=date.today().weekday()))
+    woche = _kw_text(montag)
+
+    zeilen = session.exec(select(Vorgang).where(
+        Vorgang.firma_id == firma.id, Vorgang.periode == woche)).all()
+    zeilen.sort(key=lambda v: (v.mitarbeiter_name or v.titel or "").lower())
+
+    soll = sum(v.betrag_soll_cent or 0 for v in zeilen)
+    ist = sum(v.betrag_ist_cent or 0 for v in zeilen if v.status != "offen")
+    offen_cent = sum(v.betrag_soll_cent or 0 for v in zeilen if v.status == "offen")
+
+    return {
+        "kw": woche,
+        "von": montag.isoformat(),
+        "bis": (montag + timedelta(days=6)).isoformat(),
+        "vorherige_kw": _kw_text(montag - timedelta(days=7)),
+        "naechste_kw": _kw_text(montag + timedelta(days=7)),
+        "zeilen": [_vorgang_dict(v) for v in zeilen],
+        "summe_soll": _euro(soll),
+        "summe_ist": _euro(ist),
+        "summe_offen": _euro(offen_cent),
+        "summe_differenz": _euro(ist - (soll - offen_cent)),
+        "anzahl": len(zeilen),
+        "anzahl_offen": len([v for v in zeilen if v.status == "offen"]),
+        "anzahl_differenz": len([v for v in zeilen if v.status != "offen"
+                                 and (v.betrag_ist_cent or 0) != (v.betrag_soll_cent or 0)]),
+    }
+
+
 def _kasseninventur_sicherstellen(session: Session, firma: Firma):
     """Legt den heutigen Eintrag "Kasseninventur" an, falls er noch fehlt.
 
@@ -3493,9 +3706,15 @@ def _kasseninventur_sicherstellen(session: Session, firma: Firma):
 
 
 @app.get("/vorgaenge")
-def vorgaenge_liste(current: User = Depends(get_wirk_user),
+def vorgaenge_liste(q: str = "", art: str = "", mitarbeiter_id: Optional[int] = None,
+                    von: str = "", bis: str = "", limit: int = 25,
+                    current: User = Depends(get_wirk_user),
                     session: Session = Depends(get_session)):
-    """Offene Vorgänge zuerst, dann die zuletzt erledigten."""
+    """Offene Vorgänge zuerst, dann die zuletzt erledigten.
+
+    Die Filter wirken nur auf die erledigten - offene sollen immer alle
+    sichtbar bleiben, sonst übersieht man etwas, weil noch ein Filter stand.
+    """
     firma = _vorgang_firma(current, session, schreibend=False)
     _kasseninventur_sicherstellen(session, firma)
 
@@ -3505,14 +3724,41 @@ def vorgaenge_liste(current: User = Depends(get_wirk_user),
     offen.sort(key=lambda v: (v.faellig_am or date.max, -(v.id or 0)))
     erledigt.sort(key=lambda v: (v.erledigt_am or datetime.min), reverse=True)
 
+    suche = (q or "").strip().lower()
+    von_d, bis_d = _datum_oder_none(von), _datum_oder_none(bis)
+    gefiltert = []
+    for v in erledigt:
+        if art and v.art != art:
+            continue
+        if mitarbeiter_id and v.mitarbeiter_id != mitarbeiter_id:
+            continue
+        tag = v.erledigt_am.date() if v.erledigt_am else None
+        if von_d and (tag is None or tag < von_d):
+            continue
+        if bis_d and (tag is None or tag > bis_d):
+            continue
+        if suche:
+            heuhaufen = " ".join([v.titel or "", v.mitarbeiter_name or "",
+                                  v.periode or "", v.erledigt_von_name or "",
+                                  v.erstellt_von_name or ""]).lower()
+            if suche not in heuhaufen:
+                continue
+        gefiltert.append(v)
+
+    grenze = max(1, min(int(limit or 25), 500))
+    gefiltert_ist = bool(suche or art or mitarbeiter_id or von_d or bis_d)
+
     return {
         "offen": [_vorgang_dict(v) for v in offen],
-        "erledigt": [_vorgang_dict(v) for v in erledigt[:25]],
+        "erledigt": [_vorgang_dict(v) for v in gefiltert[:grenze]],
+        "erledigt_gesamt": len(gefiltert),
+        "gefiltert": gefiltert_ist,
         "anzahl_offen": len(offen),
         "anzahl_ueberfaellig": len([v for v in offen if v.faellig_am
                                     and v.faellig_am < date.today()]),
         "darf_bearbeiten": hat_recht(current, "vorgaenge"),
         "arten": [{"key": k, "name": n} for k, n in VORGANG_ARTEN.items()],
+        "aktuelle_kw": _kw_text(date.today()),
     }
 
 
@@ -3582,6 +3828,7 @@ class VorgangErledigtRequest(BaseModel):
     ergebnis: str = "komplett"          # komplett | teilweise
     betrag: Optional[str] = None        # was tatsächlich kam
     hinweis: Optional[str] = None
+    rest_uebernehmen: bool = False      # Fehlbetrag als neuen Vorgang weiterführen
 
 
 @app.post("/vorgaenge/{vorgang_id}/erledigt")
@@ -3619,7 +3866,32 @@ def vorgang_erledigt(vorgang_id: int, data: VorgangErledigtRequest,
     session.add(v)
     _ereignis(session, v, current, "erledigt", hinweis, v.betrag_ist_cent)
     session.commit(); session.refresh(v)
-    return _vorgang_dict(v)
+
+    ergebnis_daten = _vorgang_dict(v)
+
+    # Fehlt Geld, kann der Rest gleich als neuer Vorgang weiterlaufen - sonst
+    # muss sich naechste Woche jemand daran erinnern, dass noch etwas offen war.
+    rest = (v.betrag_soll_cent or 0) - (v.betrag_ist_cent or 0)
+    ergebnis_daten["rest_cent"] = rest if rest > 0 else 0
+    ergebnis_daten["rest"] = _euro(rest) if rest > 0 else ""
+    if data.rest_uebernehmen and rest > 0:
+        woher = f" (Rest aus {v.periode})" if v.periode else " (Restbetrag)"
+        neu = Vorgang(firma_id=firma.id, art=v.art,
+                      titel=(v.mitarbeiter_name or v.titel) + woher,
+                      mitarbeiter_id=v.mitarbeiter_id,
+                      mitarbeiter_name=v.mitarbeiter_name,
+                      betrag_soll_cent=rest, nachfolger_von=v.id,
+                      faellig_am=date.today() + timedelta(days=7),
+                      erstellt_von=current.id or 0, erstellt_von_name=_wer(current))
+        session.add(neu); session.commit(); session.refresh(neu)
+        _ereignis(session, neu, current, "angelegt",
+                  f"Rest aus „{v.titel}“ – dort waren {_euro(rest)} € offen geblieben.",
+                  rest)
+        _ereignis(session, v, current, "kommentar",
+                  f"Rest von {_euro(rest)} € als neuer Vorgang weitergeführt.")
+        session.commit()
+        ergebnis_daten["rest_vorgang"] = _vorgang_dict(neu)
+    return ergebnis_daten
 
 
 class VorgangTextRequest(BaseModel):

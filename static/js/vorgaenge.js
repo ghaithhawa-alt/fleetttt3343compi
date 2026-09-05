@@ -40,13 +40,45 @@
       '<div class="vg-head">'
       +   '<div><h2>Vorgänge</h2>'
       +     '<p>Was zu tun ist – und was zurückgemeldet wurde.</p></div>'
-      +   '<div class="vg-zaehler" id="vgZaehler"></div>'
+      +   '<div class="vg-kopf-rechts">'
+      +     '<button class="vg-btn vg-btn-green" id="vgWocheBtn" type="button">Woche anlegen</button>'
+      +     '<div class="vg-zaehler" id="vgZaehler"></div>'
+      +   '</div>'
       + '</div>'
-      + '<div class="vg-spalten">'
+      + '<div class="vg-reiter">'
+      +   '<button class="vg-reiter-btn on" data-tab="liste" type="button">Liste</button>'
+      +   '<button class="vg-reiter-btn" data-tab="woche" type="button">Wochenübersicht</button>'
+      + '</div>'
+      /* ── Wochenübersicht ── */
+      + '<div id="vgWocheAnsicht" style="display:none">'
+      +   '<div class="vg-wochenkopf">'
+      +     '<button class="vg-mini" id="vgKwZurueck" type="button">◀</button>'
+      +     '<span class="vg-kw" id="vgKwText"></span>'
+      +     '<button class="vg-mini" id="vgKwVor" type="button">▶</button>'
+      +     '<span class="vg-kw-datum" id="vgKwDatum"></span>'
+      +   '</div>'
+      +   '<div class="vg-table-wrap">'
+      +     '<table class="vg-table"><thead><tr>'
+      +       '<th>Fahrer</th><th class="r">Soll</th><th class="r">Erhalten</th>'
+      +       '<th class="r">Differenz</th><th>Status</th><th></th>'
+      +     '</tr></thead><tbody id="vgWocheBody"></tbody>'
+      +     '<tfoot id="vgWocheFuss"></tfoot></table>'
+      +   '</div>'
+      + '</div>'
+      /* ── Liste ── */
+      + '<div class="vg-spalten" id="vgListeAnsicht">'
       +   '<div class="vg-links">'
       +     '<div class="vg-sec">Offen</div>'
       +     '<div id="vgOffen" class="vg-liste"></div>'
-      +     '<div class="vg-sec vg-sec-klein">Zuletzt erledigt</div>'
+      +     '<div class="vg-sec vg-sec-klein">Erledigt'
+      +       '<span class="vg-treffer" id="vgTreffer"></span></div>'
+      +     '<div class="vg-filter">'
+      +       '<input id="vgSuche" type="search" placeholder="Suchen: Fahrer, Woche, Name …">'
+      +       '<select id="vgFilterArt"><option value="">Alle Arten</option></select>'
+      +       '<input id="vgVon" type="date" title="von">'
+      +       '<input id="vgBis" type="date" title="bis">'
+      +       '<button class="vg-mini" id="vgFilterWeg" type="button">Zurücksetzen</button>'
+      +     '</div>'
       +     '<div id="vgErledigt" class="vg-liste vg-liste-blass"></div>'
       +   '</div>'
       +   '<div class="vg-rechts" id="vgNeuKarte">'
@@ -95,10 +127,29 @@
       +     '<div><label for="vgHakenText">Hinweis <span id="vgHakenPflicht"></span></label>'
       +       '<input id="vgHakenText" type="text" placeholder="z.B. Rest nächste Woche"></div>'
       +   '</div>'
+      +   '<label class="vg-haken-rest" id="vgRestZeile" style="display:none">'
+      +     '<input type="checkbox" id="vgRestHaken" checked>'
+      +     '<span>Fehlbetrag <b id="vgRestBetrag"></b> als neuen Vorgang weiterführen</span>'
+      +   '</label>'
       +   '<div class="vg-msg" id="vgHakenMsg"></div>'
       +   '<div class="vg-modal-foot">'
       +     '<button class="vg-btn" id="vgHakenAbbruch" type="button">Abbrechen</button>'
       +     '<button class="vg-btn vg-btn-green" id="vgHakenOk" type="button">Abhaken</button>'
+      +   '</div>'
+      + '</div>'
+      /* Wochen-Stapel */
+      + '<div class="vg-modal vg-modal-breit" id="vgStapelModal" style="display:none" role="dialog" aria-modal="true">'
+      +   '<h3>Woche anlegen</h3>'
+      +   '<p class="vg-modal-sub" id="vgStapelSub"></p>'
+      +   '<div class="vg-table-wrap">'
+      +     '<table class="vg-table"><thead><tr>'
+      +       '<th>Fahrer</th><th class="r">Abzukassieren</th><th></th>'
+      +     '</tr></thead><tbody id="vgStapelBody"></tbody></table>'
+      +   '</div>'
+      +   '<div class="vg-msg" id="vgStapelMsg"></div>'
+      +   '<div class="vg-modal-foot">'
+      +     '<button class="vg-btn" id="vgStapelAbbruch" type="button">Abbrechen</button>'
+      +     '<button class="vg-btn vg-btn-green" id="vgStapelOk" type="button">Vorgänge anlegen</button>'
       +   '</div>'
       + '</div>'
       /* Verlauf */
@@ -140,10 +191,141 @@
   }
 
   function dialogeZu() {
-    ["vgBackdrop", "vgHakenModal", "vgDetailModal"].forEach(function (id) {
+    ["vgBackdrop", "vgHakenModal", "vgDetailModal", "vgStapelModal"].forEach(function (id) {
       var e = document.getElementById(id); if (e) e.style.display = "none";
     });
     OFFENES_DETAIL = null;
+  }
+
+  /* ── Reiter ────────────────────────────────────────────────────── */
+  var TAB = "liste";
+  function reiter(name) {
+    TAB = name;
+    document.querySelectorAll(".vg-reiter-btn").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.tab === name);
+    });
+    document.getElementById("vgListeAnsicht").style.display = (name === "liste") ? "" : "none";
+    document.getElementById("vgWocheAnsicht").style.display = (name === "woche") ? "" : "none";
+    if (name === "woche") wocheLaden(AKTUELLE_KW);
+  }
+
+  /* ── Wochenübersicht ───────────────────────────────────────────── */
+  var AKTUELLE_KW = "";
+
+  function wocheLaden(kw) {
+    return fetch("/vorgaenge/woche" + (kw ? "?kw=" + encodeURIComponent(kw) : ""),
+                 { headers: kopf() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        AKTUELLE_KW = d.kw;
+        document.getElementById("vgKwText").textContent = d.kw.replace("-", " ");
+        document.getElementById("vgKwDatum").textContent =
+          datumKurz(d.von) + " – " + datumKurz(d.bis);
+        document.getElementById("vgKwZurueck").onclick = function () { wocheLaden(d.vorherige_kw); };
+        document.getElementById("vgKwVor").onclick = function () { wocheLaden(d.naechste_kw); };
+
+        var body = document.getElementById("vgWocheBody");
+        body.innerHTML = d.zeilen.length ? d.zeilen.map(function (v) {
+          var diff = v.status === "offen" ? "" : v.differenz_cent;
+          return '<tr>'
+            + '<td class="vg-name">' + esc(v.mitarbeiter_name || v.titel) + '</td>'
+            + '<td class="r geld">' + esc(v.betrag_soll) + '</td>'
+            + '<td class="r geld">' + (v.status === "offen" ? "–" : esc(v.betrag_ist)) + '</td>'
+            + '<td class="r geld ' + (diff < 0 ? "minus" : (diff > 0 ? "plus" : "")) + '">'
+            +   (v.status === "offen" ? "–"
+                : (diff === 0 ? "0,00" : (diff > 0 ? "+" : "") + alsEuro(diff)))
+            + '</td>'
+            + '<td>' + (v.status === "offen"
+                ? '<span class="vg-badge' + (v.ueberfaellig ? " vg-badge-rot" : "") + '">offen</span>'
+                : '<span class="vg-badge vg-badge-' + (v.ergebnis === "komplett" ? "gruen" : "gelb") + '">'
+                  + (v.ergebnis === "komplett" ? "komplett" : "nicht komplett") + '</span>') + '</td>'
+            + '<td class="r">'
+            +   (v.status === "offen" && ZUSTAND.darf_bearbeiten
+                ? '<button class="vg-mini vg-mini-green" data-haken="' + v.id + '" type="button">Abhaken</button>' : "")
+            +   '<button class="vg-mini" data-detail="' + v.id + '" type="button">Verlauf</button>'
+            + '</td></tr>';
+        }).join("") : '<tr><td colspan="6" class="vg-leer">Für diese Woche wurde noch nichts angelegt.</td></tr>';
+
+        document.getElementById("vgWocheFuss").innerHTML = d.zeilen.length
+          ? '<tr><td>' + d.anzahl + ' Fahrer · ' + d.anzahl_offen + ' offen · '
+            + d.anzahl_differenz + ' mit Differenz</td>'
+            + '<td class="r geld">' + esc(d.summe_soll) + '</td>'
+            + '<td class="r geld">' + esc(d.summe_ist) + '</td>'
+            + '<td class="r geld ' + (d.summe_differenz.indexOf("-") === 0 ? "minus" : "") + '">'
+            +   esc(d.summe_differenz) + '</td><td colspan="2"></td></tr>'
+          : "";
+
+        document.querySelectorAll("#vgWocheBody [data-haken]").forEach(function (b) {
+          b.onclick = function () { hakenOeffnen(Number(b.dataset.haken), d.zeilen); };
+        });
+        document.querySelectorAll("#vgWocheBody [data-detail]").forEach(function (b) {
+          b.onclick = function () { detailOeffnen(Number(b.dataset.detail)); };
+        });
+      }).catch(function () {});
+  }
+
+  /* ── Wochen-Stapel ─────────────────────────────────────────────── */
+  var STAPEL_KW = "";
+
+  function stapelOeffnen() {
+    var kw = (TAB === "woche" && AKTUELLE_KW) ? AKTUELLE_KW : (ZUSTAND.aktuelle_kw || "");
+    fetch("/vorgaenge/wochenvorschlag" + (kw ? "?kw=" + encodeURIComponent(kw) : ""),
+          { headers: kopf() })
+      .then(function (r) {
+        if (!r.ok) return fehlertext(r).then(function (t) { fcInfo("Nicht möglich", t); return null; });
+        return r.json();
+      })
+      .then(function (d) {
+        if (!d) return;
+        STAPEL_KW = d.kw;
+        document.getElementById("vgStapelSub").innerHTML = d.lohn_gefunden
+          ? 'Beträge aus dem Lohn-Modul, <b>' + esc(d.lohn_monat) + '</b>, Woche '
+            + d.lohn_woche_nr + ' (Feld „Offen"). Du kannst jeden Wert ändern.'
+          : 'Für <b>' + esc(d.lohn_monat) + '</b> liegen im Lohn-Modul noch keine Daten. '
+            + 'Trage die Beträge von Hand ein.';
+        document.getElementById("vgStapelBody").innerHTML = d.fahrer.map(function (f) {
+          return '<tr' + (f.schon_angelegt ? ' class="vg-schon"' : '') + '>'
+            + '<td class="vg-name">' + esc(f.name) + '</td>'
+            + '<td class="r"><input class="vg-stapel-feld" data-ma="' + f.mitarbeiter_id + '"'
+            +   ' type="text" inputmode="decimal" value="' + esc(f.vorschlag_cent ? f.vorschlag : "") + '"'
+            +   (f.schon_angelegt ? " disabled" : "") + ' placeholder="0,00"></td>'
+            + '<td>' + (f.schon_angelegt
+                ? '<span class="vg-badge vg-badge-gruen">schon angelegt</span>' : "") + '</td>'
+            + '</tr>';
+        }).join("") || '<tr><td colspan="3" class="vg-leer">Keine aktiven Mitarbeiter.</td></tr>';
+        meldung("vgStapelMsg", "");
+        document.getElementById("vgBackdrop").style.display = "block";
+        document.getElementById("vgStapelModal").style.display = "block";
+      }).catch(function () {});
+  }
+
+  function stapelSenden() {
+    var zeilen = [];
+    document.querySelectorAll(".vg-stapel-feld").forEach(function (i) {
+      if (i.disabled) return;
+      var wert = (i.value || "").trim();
+      if (wert) zeilen.push({ mitarbeiter_id: Number(i.dataset.ma), betrag: wert });
+    });
+    if (!zeilen.length) {
+      meldung("vgStapelMsg", "Trage mindestens einen Betrag ein.", "fehler");
+      return;
+    }
+    fetch("/vorgaenge/stapel", {
+      method: "POST", headers: kopf({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ kw: STAPEL_KW, zeilen: zeilen })
+    }).then(function (r) {
+      if (!r.ok) return fehlertext(r).then(function (t) { meldung("vgStapelMsg", t, "fehler"); });
+      return r.json().then(function (d) {
+        dialogeZu();
+        laden();
+        if (TAB === "woche") wocheLaden(STAPEL_KW);
+        fcInfo("Woche angelegt",
+          d.angelegt + (d.angelegt === 1 ? " Vorgang" : " Vorgänge") + " für " + d.kw + " angelegt."
+          + (d.uebersprungen ? " " + d.uebersprungen + " übersprungen (kein Betrag oder schon vorhanden)." : ""),
+          "info");
+      });
+    }).catch(function () { meldung("vgStapelMsg", "Verbindung fehlgeschlagen.", "fehler"); });
   }
 
   /* ── Liste zeichnen ────────────────────────────────────────────── */
@@ -218,8 +400,22 @@
   }
 
   /* ── Laden ─────────────────────────────────────────────────────── */
+  function filterAbfrage() {
+    var t = [];
+    var q = (document.getElementById("vgSuche") || {}).value;
+    var a = (document.getElementById("vgFilterArt") || {}).value;
+    var von = (document.getElementById("vgVon") || {}).value;
+    var bis = (document.getElementById("vgBis") || {}).value;
+    if (q && q.trim()) t.push("q=" + encodeURIComponent(q.trim()));
+    if (a) t.push("art=" + encodeURIComponent(a));
+    if (von) t.push("von=" + von);
+    if (bis) t.push("bis=" + bis);
+    t.push("limit=100");
+    return "?" + t.join("&");
+  }
+
   function laden() {
-    return fetch("/vorgaenge", { headers: kopf() })
+    return fetch("/vorgaenge" + filterAbfrage(), { headers: kopf() })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
@@ -230,6 +426,18 @@
   }
 
   function artenFuellen() {
+    var tr = document.getElementById("vgTreffer");
+    if (tr) tr.textContent = ZUSTAND.gefiltert ? (ZUSTAND.erledigt_gesamt || 0) + " Treffer" : "";
+
+    var filter = document.getElementById("vgFilterArt");
+    if (filter && filter.options.length <= 1) {
+      (ZUSTAND.arten || []).forEach(function (a) {
+        var o = document.createElement("option");
+        o.value = a.key; o.textContent = a.name;
+        filter.appendChild(o);
+      });
+    }
+
     var sel = document.getElementById("vgArt");
     if (!sel || sel.options.length) return;
     sel.innerHTML = (ZUSTAND.arten || []).map(function (a) {
@@ -306,31 +514,81 @@
   }
 
   /* ── Abhaken ───────────────────────────────────────────────────── */
-  function hakenOeffnen(id) {
-    var v = finde(id);
+  var HAKEN_SOLL = 0;
+
+  function hakenOeffnen(id, quelle) {
+    var v = (quelle || []).filter(function (x) { return x.id === id; })[0] || finde(id);
     OFFENES_DETAIL = id;
+    HAKEN_SOLL = v.betrag_soll_cent || 0;
     document.getElementById("vgHakenTitel").textContent = v.titel || "Abhaken";
-    document.getElementById("vgHakenSub").textContent = v.betrag_soll_cent
+    document.getElementById("vgHakenSub").textContent = HAKEN_SOLL
       ? "Vorgesehen: " + v.betrag_soll + " €"
       : "Kein Betrag hinterlegt.";
-    document.getElementById("vgHakenBetragFeld").style.display = v.betrag_soll_cent ? "" : "none";
-    document.getElementById("vgHakenBetrag").value = v.betrag_soll_cent ? v.betrag_soll : "";
+    document.getElementById("vgHakenBetragFeld").style.display = HAKEN_SOLL ? "" : "none";
+    document.getElementById("vgHakenBetrag").value = HAKEN_SOLL ? v.betrag_soll : "";
     document.getElementById("vgHakenText").value = "";
     document.querySelectorAll(".vg-wahl-btn").forEach(function (x) {
       x.classList.toggle("on", x.dataset.erg === "komplett");
     });
     document.getElementById("vgHakenPflicht").textContent = "(optional)";
+    document.getElementById("vgRestHaken").checked = true;
+    restZeileAktualisieren();
     meldung("vgHakenMsg", "");
     document.getElementById("vgBackdrop").style.display = "block";
     document.getElementById("vgHakenModal").style.display = "block";
   }
 
+  /* Cent zu deutschem Euro-Text: 137540 -> "1.375,40" */
+  function alsEuro(cent) {
+    var neg = cent < 0;
+    var t = Math.abs(cent || 0).toString();
+    while (t.length < 3) t = "0" + t;
+    var ganz = t.slice(0, -2), rest = t.slice(-2);
+    ganz = ganz.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return (neg ? "-" : "") + ganz + "," + rest;
+  }
+
+  /* Euro-Text zu Cent - nur fuer die Anzeige des Restbetrags im Dialog.
+     Gerechnet wird am Ende immer auf dem Server. */
+  function alsCent(text) {
+    var t = (text || "").replace(/[€\s]/g, "");
+    if (!t) return 0;
+    var trenner = Math.max(t.lastIndexOf(","), t.lastIndexOf("."));
+    var ganz, rest;
+    if (trenner < 0) { ganz = t; rest = ""; }
+    else if (t.length - trenner - 1 === 3 && (t.match(/[.,]/g) || []).length === 1) {
+      ganz = t.replace(/[.,]/g, ""); rest = "";
+    } else {
+      ganz = t.slice(0, trenner).replace(/[.,]/g, ""); rest = t.slice(trenner + 1);
+    }
+    var n = parseInt(ganz || "0", 10);
+    if (isNaN(n)) return 0;
+    return n * 100 + parseInt((rest + "00").slice(0, 2), 10);
+  }
+
+  function restZeileAktualisieren() {
+    var zeile = document.getElementById("vgRestZeile");
+    var teil = (document.querySelector(".vg-wahl-btn.on") || {}).dataset
+      && document.querySelector(".vg-wahl-btn.on").dataset.erg === "teilweise";
+    var ist = alsCent(document.getElementById("vgHakenBetrag").value);
+    var rest = HAKEN_SOLL - ist;
+    if (teil && HAKEN_SOLL && rest > 0) {
+      document.getElementById("vgRestBetrag").textContent = alsEuro(rest) + " €";
+      zeile.style.display = "";
+    } else {
+      zeile.style.display = "none";
+    }
+  }
+
   function abhakenSenden() {
     var erg = (document.querySelector(".vg-wahl-btn.on") || {}).dataset.erg || "komplett";
+    var restAn = document.getElementById("vgRestZeile").style.display !== "none"
+      && document.getElementById("vgRestHaken").checked;
     var koerper = {
       ergebnis: erg,
       betrag: document.getElementById("vgHakenBetrag").value.trim(),
-      hinweis: document.getElementById("vgHakenText").value.trim()
+      hinweis: document.getElementById("vgHakenText").value.trim(),
+      rest_uebernehmen: restAn
     };
     if (erg === "teilweise" && !koerper.hinweis) {
       meldung("vgHakenMsg", "Bitte kurz beschreiben, was gefehlt hat.", "fehler");
@@ -341,8 +599,16 @@
       body: JSON.stringify(koerper)
     }).then(function (r) {
       if (!r.ok) return fehlertext(r).then(function (t) { meldung("vgHakenMsg", t, "fehler"); });
-      dialogeZu();
-      laden();
+      return r.json().then(function (d) {
+        dialogeZu();
+        laden();
+        if (TAB === "woche") wocheLaden(AKTUELLE_KW);
+        if (d.rest_vorgang) {
+          fcInfo("Rest weitergeführt",
+            "Der Fehlbetrag von " + d.rest + " € steht jetzt als eigener Vorgang in der Liste.",
+            "info");
+        }
+      });
     }).catch(function () { meldung("vgHakenMsg", "Verbindung fehlgeschlagen.", "fehler"); });
   }
 
@@ -525,6 +791,34 @@
             buildPage();
             document.getElementById("vgAnlegen").onclick = anlegen;
             document.getElementById("vgFaellig").value = new Date().toISOString().slice(0, 10);
+
+            document.querySelectorAll(".vg-reiter-btn").forEach(function (b) {
+              b.onclick = function () { reiter(b.dataset.tab); };
+            });
+            document.getElementById("vgWocheBtn").onclick = stapelOeffnen;
+            document.getElementById("vgStapelOk").onclick = stapelSenden;
+            document.getElementById("vgStapelAbbruch").onclick = dialogeZu;
+
+            // Restbetrag-Zeile mitrechnen, waehrend getippt wird
+            document.getElementById("vgHakenBetrag").addEventListener("input", restZeileAktualisieren);
+            document.querySelectorAll(".vg-wahl-btn").forEach(function (b) {
+              b.addEventListener("click", restZeileAktualisieren);
+            });
+
+            // Filter: Tippen mit kurzer Verzoegerung, damit nicht jede Taste laedt
+            var timer = null;
+            function spaeter() { clearTimeout(timer); timer = setTimeout(laden, 350); }
+            document.getElementById("vgSuche").addEventListener("input", spaeter);
+            ["vgFilterArt", "vgVon", "vgBis"].forEach(function (id) {
+              document.getElementById(id).addEventListener("change", laden);
+            });
+            document.getElementById("vgFilterWeg").onclick = function () {
+              document.getElementById("vgSuche").value = "";
+              document.getElementById("vgFilterArt").value = "";
+              document.getElementById("vgVon").value = "";
+              document.getElementById("vgBis").value = "";
+              laden();
+            };
             var versuche = 0;
             var iv = setInterval(function () {
               versuche++;
