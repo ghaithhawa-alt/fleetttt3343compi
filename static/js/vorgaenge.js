@@ -141,6 +141,12 @@
       + '<div class="vg-modal vg-modal-breit" id="vgStapelModal" style="display:none" role="dialog" aria-modal="true">'
       +   '<h3>Woche anlegen</h3>'
       +   '<p class="vg-modal-sub" id="vgStapelSub"></p>'
+      +   '<div class="vg-quelle">'
+      +     '<label for="vgStapelMonat">Beträge aus Lohn-Monat</label>'
+      +     '<select id="vgStapelMonat"></select>'
+      +     '<label for="vgStapelWoche">Woche</label>'
+      +     '<select id="vgStapelWoche"></select>'
+      +   '</div>'
       +   '<div class="vg-table-wrap">'
       +     '<table class="vg-table"><thead><tr>'
       +       '<th>Fahrer</th><th class="r">Abzukassieren</th><th></th>'
@@ -265,12 +271,24 @@
       }).catch(function () {});
   }
 
+  var MONATSNAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni",
+                    "Juli", "August", "September", "Oktober", "November", "Dezember"];
+
+  function monatText(m) {
+    if (!/^\d{4}-\d{2}$/.test(m || "")) return m || "";
+    return MONATSNAMEN[Number(m.slice(5, 7)) - 1] + " " + m.slice(0, 4);
+  }
+
   /* ── Wochen-Stapel ─────────────────────────────────────────────── */
   var STAPEL_KW = "";
 
-  function stapelOeffnen() {
+  function stapelOeffnen(monat, wocheNr) {
     var kw = (TAB === "woche" && AKTUELLE_KW) ? AKTUELLE_KW : (ZUSTAND.aktuelle_kw || "");
-    fetch("/vorgaenge/wochenvorschlag" + (kw ? "?kw=" + encodeURIComponent(kw) : ""),
+    var frage = [];
+    if (kw) frage.push("kw=" + encodeURIComponent(kw));
+    if (monat) frage.push("lohn_monat=" + encodeURIComponent(monat));
+    if (wocheNr) frage.push("lohn_woche=" + wocheNr);
+    fetch("/vorgaenge/wochenvorschlag" + (frage.length ? "?" + frage.join("&") : ""),
           { headers: kopf() })
       .then(function (r) {
         if (!r.ok) return fehlertext(r).then(function (t) { fcInfo("Nicht möglich", t); return null; });
@@ -279,11 +297,40 @@
       .then(function (d) {
         if (!d) return;
         STAPEL_KW = d.kw;
-        document.getElementById("vgStapelSub").innerHTML = d.lohn_gefunden
-          ? 'Beträge aus dem Lohn-Modul, <b>' + esc(d.lohn_monat) + '</b>, Woche '
-            + d.lohn_woche_nr + ' (Feld „Offen"). Du kannst jeden Wert ändern.'
-          : 'Für <b>' + esc(d.lohn_monat) + '</b> liegen im Lohn-Modul noch keine Daten. '
-            + 'Trage die Beträge von Hand ein.';
+
+        /* Monat und Woche zur Auswahl stellen - die Zuordnung Kalenderwoche zu
+           Lohn-Woche ist eine Vermutung und muss korrigierbar sein. */
+        var mSel = document.getElementById("vgStapelMonat");
+        var monate = d.lohn_monate || [];
+        if (monate.indexOf(d.lohn_monat) < 0) monate = [d.lohn_monat].concat(monate);
+        mSel.innerHTML = monate.map(function (m) {
+          return '<option value="' + esc(m) + '"' + (m === d.lohn_monat ? " selected" : "")
+            + '>' + esc(monatText(m)) + '</option>';
+        }).join("");
+        var wSel = document.getElementById("vgStapelWoche");
+        var anzahl = d.lohn_wochen_anzahl || 5;
+        var wOpt = "";
+        for (var i = 1; i <= anzahl; i++) {
+          wOpt += '<option value="' + i + '"' + (i === d.lohn_woche_nr ? " selected" : "")
+            + '>Woche ' + i + '</option>';
+        }
+        wSel.innerHTML = wOpt;
+        wSel.disabled = !d.lohn_gefunden;
+        mSel.onchange = function () { stapelOeffnen(mSel.value, 0); };
+        wSel.onchange = function () { stapelOeffnen(mSel.value, Number(wSel.value)); };
+
+        var treffer = d.fahrer.filter(function (f) { return f.vorschlag_cent; }).length;
+        document.getElementById("vgStapelSub").innerHTML = !d.lohn_gefunden
+          ? 'Für <b>' + esc(monatText(d.lohn_monat)) + '</b> ist im Lohn-Modul nichts gespeichert. '
+            + 'Wähle links einen anderen Monat oder trage die Beträge von Hand ein.'
+          : (treffer
+            ? 'Feld „Offen" aus dem Lohn-Modul. Du kannst jeden Wert ändern.'
+            : 'In dieser Lohn-Woche steht bei keinem Fahrer etwas unter „Offen". '
+              + 'Probiere eine andere Woche oder trage die Beträge von Hand ein.')
+          + (d.lohn_ohne_mitarbeiter && d.lohn_ohne_mitarbeiter.length
+            ? '<br><span class="vg-warn">Im Lohn, aber nicht unter Mitarbeiter: '
+              + esc(d.lohn_ohne_mitarbeiter.join(", ")) + '</span>' : "");
+
         document.getElementById("vgStapelBody").innerHTML = d.fahrer.map(function (f) {
           return '<tr' + (f.schon_angelegt ? ' class="vg-schon"' : '') + '>'
             + '<td class="vg-name">' + esc(f.name) + '</td>'
@@ -795,7 +842,7 @@
             document.querySelectorAll(".vg-reiter-btn").forEach(function (b) {
               b.onclick = function () { reiter(b.dataset.tab); };
             });
-            document.getElementById("vgWocheBtn").onclick = stapelOeffnen;
+            document.getElementById("vgWocheBtn").onclick = function () { stapelOeffnen("", 0); };
             document.getElementById("vgStapelOk").onclick = stapelSenden;
             document.getElementById("vgStapelAbbruch").onclick = dialogeZu;
 

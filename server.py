@@ -3505,38 +3505,97 @@ def _kw_montag(kw: str) -> date:
         raise HTTPException(status_code=400, detail=f"Ungültige Kalenderwoche: {kw}")
 
 
-def _lohn_wochenwerte(session: Session, firma_id: int, montag: date) -> dict:
+def _woche_index(monat: str, montag: date) -> int:
+    """Der wievielte Montag des Berichtsmonats ist das? 0-basiert.
+
+    Liegt der Montag vor dem Monatsersten (die Woche läuft über den
+    Monatswechsel), zählt sie als erste Woche des Monats.
+    """
+    try:
+        erster = date(int(monat[:4]), int(monat[5:7]), 1)
+    except ValueError:
+        return 0
+    return max(0, (montag - erster).days // 7)
+
+
+def _lohn_monat_waehlen(session: Session, firma_id: int, montag: date,
+                        gewuenscht: str = "") -> str:
+    """Welcher Lohn-Monat gehört zu dieser Kalenderwoche?
+
+    Eine Woche kann über den Monatswechsel laufen (Montag im August, Sonntag
+    im September). Darum werden beide Monate geprüft und der genommen, für den
+    es überhaupt gespeicherte Lohndaten gibt. Findet sich keiner, wird der
+    zuletzt gespeicherte Monat vorgeschlagen - sonst stünde der Anwender vor
+    einem leeren Dialog, ohne zu wissen warum.
+    """
+    if gewuenscht and re.match(r"^\d{4}-\d{2}$", gewuenscht):
+        return gewuenscht
+    sonntag = montag + timedelta(days=6)
+    kandidaten = [montag.strftime("%Y-%m")]
+    if sonntag.strftime("%Y-%m") != kandidaten[0]:
+        kandidaten.append(sonntag.strftime("%Y-%m"))
+    for monat in kandidaten:
+        if _get_blob(session, firma_id, "lohn_monat", _safe_periode(monat)) is not None:
+            return monat
+    vorhanden = _list_keys(session, firma_id, "lohn_monat")
+    if vorhanden:
+        return sorted(vorhanden)[-1]
+    return kandidaten[0]
+
+
+def _lohn_wochenwerte(session: Session, firma_id: int, montag: date,
+                      monat: str = "", woche_nr: int = 0) -> dict:
     """Liefert {Fahrername (klein): offen_in_cent} aus dem Lohn-Monat.
 
-    Welche Zeile im Monat? Der wievielte Montag der Monat hat, ist der Index -
-    der erste Montag ist Woche 1. Das ist eine Annahme; deshalb wird sie in der
-    Oberfläche mit angezeigt und der Betrag bleibt überschreibbar.
+    monat und woche_nr sind optional. Ohne sie wird geraten (siehe
+    _lohn_monat_waehlen und _woche_index) - in der Oberfläche kann der
+    Anwender beides umstellen, damit die Vermutung nie zur Sackgasse wird.
     """
-    monat = montag.strftime("%Y-%m")
+    monat = _lohn_monat_waehlen(session, firma_id, montag, monat)
+    leer = {"monat": monat, "woche_nr": max(1, woche_nr or _woche_index(monat, montag) + 1),
+            "gefunden": False, "werte": {}, "wochen_anzahl": 0, "namen": []}
     blob = _get_blob(session, firma_id, "lohn_monat", _safe_periode(monat))
     if blob is None:
-        return {"monat": monat, "woche_nr": (montag.day - 1) // 7 + 1,
-                "gefunden": False, "werte": {}}
-    index = (montag.day - 1) // 7          # 0-basiert: erster Montag = 0
-    werte = {}
+        return leer
     try:
         daten = json.loads(blob.data)
-        for fahrer in (daten.get("drivers") or []):
-            name = (fahrer.get("name") or "").strip()
-            wochen = fahrer.get("wochen") or []
-            if not name or index >= len(wochen):
-                continue
-            offen = (wochen[index] or {}).get("offen")
-            if offen in (None, "", 0):
-                continue
-            werte[name.lower()] = _cent(offen)
     except Exception:
-        return {"monat": monat, "woche_nr": index + 1, "gefunden": False, "werte": {}}
-    return {"monat": monat, "woche_nr": index + 1, "gefunden": True, "werte": werte}
+        return leer
+
+    # Vorsicht: die Lohndaten sind ein freies JSON aus dem Dashboard. Ein
+    # kaputter oder alter Stand darf den Vorgangs-Dialog nicht lahmlegen.
+    def _wochen_von(fahrer) -> list:
+        w = fahrer.get("wochen")
+        return [z for z in w if isinstance(z, dict)] if isinstance(w, list) else []
+
+    roh = daten.get("drivers") if isinstance(daten, dict) else None
+    fahrer_liste = [f for f in roh if isinstance(f, dict)] if isinstance(roh, list) else []
+    anzahl = max([len(_wochen_von(f)) for f in fahrer_liste] or [0])
+    index = (woche_nr - 1) if woche_nr else _woche_index(monat, montag)
+    index = min(max(index, 0), max(anzahl - 1, 0))
+
+    werte, namen = {}, []
+    for fahrer in fahrer_liste:
+        name = str(fahrer.get("name") or "").strip()
+        if not name:
+            continue
+        namen.append(name)
+        wochen = _wochen_von(fahrer)
+        if index >= len(wochen):
+            continue
+        offen = wochen[index].get("offen")
+        if offen in (None, "", 0):
+            continue
+        try:
+            werte[name.lower()] = _cent(offen)
+        except HTTPException:
+            continue
+    return {"monat": monat, "woche_nr": index + 1, "gefunden": True,
+            "werte": werte, "wochen_anzahl": anzahl, "namen": namen}
 
 
 @app.get("/vorgaenge/wochenvorschlag")
-def wochenvorschlag(kw: str = "",
+def wochenvorschlag(kw: str = "", lohn_monat: str = "", lohn_woche: int = 0,
                     current: User = Depends(get_wirk_user),
                     session: Session = Depends(get_session)):
     """Alle aktiven Fahrer einer Kalenderwoche, mit Betragsvorschlag aus dem Lohn.
@@ -3548,7 +3607,7 @@ def wochenvorschlag(kw: str = "",
     montag = _kw_montag(kw) if kw else (date.today() - timedelta(days=date.today().weekday()))
     woche = _kw_text(montag)
 
-    lohn = _lohn_wochenwerte(session, firma.id, montag)
+    lohn = _lohn_wochenwerte(session, firma.id, montag, lohn_monat.strip(), lohn_woche)
     schon_da = {v.mitarbeiter_id: v.id for v in session.exec(
         select(Vorgang).where(Vorgang.firma_id == firma.id,
                               Vorgang.art == "fahrer_kassieren",
@@ -3558,6 +3617,11 @@ def wochenvorschlag(kw: str = "",
         select(Mitarbeiter).where(Mitarbeiter.firma_id == firma.id)).all() if m.aktiv]
     fahrer.sort(key=lambda m: m.name.lower())
 
+    # Namen, die im Lohn stehen, aber unter Mitarbeiter fehlen. Ohne diesen
+    # Hinweis sucht man lange, warum ein Fahrer keinen Vorschlag bekommt.
+    bekannt = {m.name.strip().lower() for m in fahrer}
+    ohne_mitarbeiter = [n for n in lohn["namen"] if n.strip().lower() not in bekannt]
+
     return {
         "kw": woche,
         "von": montag.isoformat(),
@@ -3565,6 +3629,9 @@ def wochenvorschlag(kw: str = "",
         "lohn_monat": lohn["monat"],
         "lohn_woche_nr": lohn["woche_nr"],
         "lohn_gefunden": lohn["gefunden"],
+        "lohn_wochen_anzahl": lohn["wochen_anzahl"],
+        "lohn_monate": sorted(_list_keys(session, firma.id, "lohn_monat"), reverse=True),
+        "lohn_ohne_mitarbeiter": ohne_mitarbeiter,
         "fahrer": [{
             "mitarbeiter_id": m.id,
             "name": m.name,
