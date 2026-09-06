@@ -3718,10 +3718,14 @@ def wochenvorschlag(kw: str = "", lohn_monat: str = "", lohn_woche: int = 0,
     woche = _kw_text(montag)
 
     lohn = _lohn_wochenwerte(session, firma.id, montag, lohn_monat.strip(), lohn_woche)
-    schon_da = {v.mitarbeiter_id: v.id for v in session.exec(
-        select(Vorgang).where(Vorgang.firma_id == firma.id,
-                              Vorgang.art == "fahrer_kassieren",
-                              Vorgang.periode == woche)).all()}
+    # Wer für diese Woche schon einen Vorgang hat - mitsamt dem Betrag, der
+    # dort wirklich steht. Der kann vom Lohn-Vorschlag abweichen, wenn jemand
+    # ihn beim Anlegen geändert hat; angezeigt gehört dann der echte Wert.
+    schon_da = {}
+    for v in session.exec(select(Vorgang).where(
+            Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
+            Vorgang.periode == woche, Vorgang.status != "storniert")).all():
+        schon_da[v.mitarbeiter_id] = v
 
     fahrer = [m for m in session.exec(
         select(Mitarbeiter).where(Mitarbeiter.firma_id == firma.id)).all() if m.aktiv]
@@ -3750,7 +3754,10 @@ def wochenvorschlag(kw: str = "", lohn_monat: str = "", lohn_woche: int = 0,
             "vorschlag": _euro(lohn["werte"].get(_name_schluessel(m.name), 0)),
             "vorschlag_cent": lohn["werte"].get(_name_schluessel(m.name), 0),
             "schon_angelegt": m.id in schon_da,
-            "vorgang_id": schon_da.get(m.id),
+            "vorgang_id": schon_da[m.id].id if m.id in schon_da else None,
+            "angelegt_betrag": (_euro(schon_da[m.id].betrag_soll_cent)
+                                if m.id in schon_da else ""),
+            "angelegt_status": schon_da[m.id].status if m.id in schon_da else "",
         } for m in fahrer],
     }
 

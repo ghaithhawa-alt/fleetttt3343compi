@@ -528,16 +528,42 @@
         });
 
         document.getElementById("vgStapelBody").innerHTML = d.fahrer.map(function (f) {
+          /* Für schon angelegte Fahrer kein gesperrtes Eingabefeld: ein
+             ausgegrauter Betrag im Feld sieht aus, als sei nichts übernommen
+             worden. Stattdessen der Betrag als Text plus deutliche Marke. */
           return '<tr' + (f.schon_angelegt ? ' class="vg-schon"' : '') + '>'
             + '<td class="vg-name">' + esc(f.name) + '</td>'
-            + '<td class="r"><input class="vg-stapel-feld" data-ma="' + f.mitarbeiter_id + '"'
-            +   ' type="text" inputmode="decimal" value="' + esc(f.vorschlag_cent ? f.vorschlag : "") + '"'
-            +   (f.schon_angelegt ? " disabled" : "") + ' placeholder="0,00"></td>'
+            /* Bei schon angelegten Fahrern zählt der Betrag AUS DEM VORGANG,
+               nicht der Lohn-Vorschlag - sonst zeigt der Dialog eine Zahl,
+               die so nirgends gefordert wird. */
+            + '<td class="r">' + (f.schon_angelegt
+                ? '<span class="vg-fest">' + esc(f.angelegt_betrag || "–") + '</span>'
+                : '<input class="vg-stapel-feld" data-ma="' + f.mitarbeiter_id + '"'
+                  + ' type="text" inputmode="decimal" value="'
+                  + esc(f.vorschlag_cent ? f.vorschlag : "") + '" placeholder="0,00">') + '</td>'
             + '<td>' + (f.schon_angelegt
-                ? '<span class="vg-badge vg-badge-gruen">schon angelegt</span>' : "") + '</td>'
+                ? '<span class="vg-badge vg-badge-gruen">'
+                  + (f.angelegt_status === "erledigt" ? "erledigt" : "schon angelegt")
+                  + '</span>' : "") + '</td>'
             + '</tr>';
         }).join("") || '<tr><td colspan="3" class="vg-leer">Keine aktiven Mitarbeiter.</td></tr>';
-        meldung("vgStapelMsg", "");
+
+        /* Sind alle Fahrer schon dran, ist der Dialog erledigt - das gehört
+           oben hin, nicht als roter Fehler beim Absenden. */
+        var offeneFahrer = d.fahrer.filter(function (f) { return !f.schon_angelegt; });
+        var fertig = d.fahrer.length && !offeneFahrer.length;
+        document.getElementById("vgStapelOk").disabled = fertig;
+        if (fertig) {
+          meldung("vgStapelMsg",
+            "Für " + d.kw + " sind bereits alle " + d.fahrer.length
+            + " Fahrer angelegt. Hier ist nichts mehr zu tun.", "ok");
+        } else if (d.fahrer.length !== offeneFahrer.length) {
+          meldung("vgStapelMsg",
+            (d.fahrer.length - offeneFahrer.length) + " von " + d.fahrer.length
+            + " Fahrern sind für " + d.kw + " schon angelegt.", "ok");
+        } else {
+          meldung("vgStapelMsg", "");
+        }
         document.getElementById("vgDiagnose").style.display = "none";
         document.getElementById("vgBackdrop").style.display = "block";
         document.getElementById("vgStapelModal").style.display = "block";
@@ -552,7 +578,11 @@
       if (wert) zeilen.push({ mitarbeiter_id: Number(i.dataset.ma), betrag: wert });
     });
     if (!zeilen.length) {
-      meldung("vgStapelMsg", "Trage mindestens einen Betrag ein.", "fehler");
+      var frei = document.querySelectorAll(".vg-stapel-feld").length;
+      meldung("vgStapelMsg", frei
+        ? "Trage bei mindestens einem Fahrer einen Betrag ein."
+        : "Für diese Woche ist schon jeder Fahrer angelegt – hier ist nichts mehr zu tun.",
+        frei ? "fehler" : "ok");
       return;
     }
     fetch("/vorgaenge/stapel", {
