@@ -422,3 +422,28 @@ body.fc-shell .vg-btn:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 420px) {
   body.fc-shell .vg-kacheln { grid-template-columns: 1fr; }
 }
+
+/* ── Vier-Augen-Prinzip ─────────────────────────────────────────── */
+body.fc-shell .vg-schalter {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: #a1a1aa; cursor: pointer;
+  padding: 0 12px 0 4px;
+}
+body.fc-shell .vg-schalter input { width: 16px; height: 16px; accent-color: #10b981; }
+
+body.fc-shell .vg-badge-blau {
+  background: rgba(59,130,246,.14);
+  color: #93c5fd;
+  border-color: rgba(59,130,246,.3);
+}
+body.fc-shell .vg-zeile-wartet { border-left: 3px solid rgba(59,130,246,.55); }
+
+/* ── Kassenabgleich ─────────────────────────────────────────────── */
+body.fc-shell .vg-kasse-hinweis {
+  margin-top: 6px; font-size: 11.5px; color: #71717a; line-height: 1.5;
+}
+body.fc-shell .vg-kasse-hinweis.ok { color: #10b981; }
+body.fc-shell .vg-kasse-hinweis.warn { color: #eab308; }
+
+/* Guthaben: grün statt rot, weil es dem Fahrer gehört */
+body.fc-shell .vg-table td.plus, body.fc-shell .geld.plus { color: #10b981; }

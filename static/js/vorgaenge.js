@@ -25,9 +25,11 @@
   var ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
     + '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
 
-  var ZUSTAND = { offen: [], erledigt: [], arten: [], darf_bearbeiten: false };
+  var ZUSTAND = { offen: [], wartend: [], erledigt: [], arten: [],
+                darf_bearbeiten: false, vier_augen: false };
   var FAHRER = [];
   var OFFENES_DETAIL = null;
+  var DARF_EINSTELLEN = false;
 
   /* ── Seite ─────────────────────────────────────────────────────── */
   function buildPage() {
@@ -41,6 +43,9 @@
       +   '<div><h2>Vorgänge</h2>'
       +     '<p>Was zu tun ist – und was zurückgemeldet wurde.</p></div>'
       +   '<div class="vg-kopf-rechts">'
+      +     '<label class="vg-schalter" id="vgVierAugen" style="display:none">'
+      +       '<input type="checkbox" id="vgVierAugenAn">'
+      +       '<span>Vier-Augen-Prinzip</span></label>'
       +     '<button class="vg-btn vg-btn-green" id="vgWocheBtn" type="button">Woche anlegen</button>'
       +     '<div class="vg-zaehler" id="vgZaehler"></div>'
       +   '</div>'
@@ -60,8 +65,8 @@
       +   '</div>'
       +   '<div class="vg-table-wrap">'
       +     '<table class="vg-table"><thead><tr>'
-      +       '<th>Fahrer</th><th class="r">Soll</th><th class="r">Erhalten</th>'
-      +       '<th class="r">Differenz</th><th>Status</th><th></th>'
+      +       '<th>Fahrer</th><th class="r">Soll</th><th class="r">Bar</th>'
+      +       '<th class="r">Belege</th><th class="r">Differenz</th><th>Status</th><th></th>'
       +     '</tr></thead><tbody id="vgWocheBody"></tbody>'
       +     '<tfoot id="vgWocheFuss"></tfoot></table>'
       +   '</div>'
@@ -73,7 +78,7 @@
       +     '<div class="vg-table-wrap">'
       +       '<table class="vg-table"><thead><tr>'
       +         '<th>Fahrer</th><th class="r">Offen</th><th class="r">Gestellt</th>'
-      +         '<th class="r">Erhalten</th><th class="r">Abgeschrieben</th>'
+      +         '<th class="r">Bar</th><th class="r">Belege</th><th class="r">Abgeschrieben</th>'
       +         '<th>Letzte Zahlung</th><th></th>'
       +       '</tr></thead><tbody id="vgKontoBody"></tbody>'
       +       '<tfoot id="vgKontoFuss"></tfoot></table>'
@@ -87,8 +92,9 @@
       +     '<div class="vg-kacheln" id="vgKontoDetailKacheln"></div>'
       +     '<div class="vg-table-wrap">'
       +       '<table class="vg-table"><thead><tr>'
-      +         '<th>Vorgang</th><th class="r">Gefordert</th><th class="r">Erhalten</th>'
-      +         '<th class="r">Fehlt</th><th class="r">Stand danach</th><th>Status</th><th></th>'
+      +         '<th>Vorgang</th><th class="r">Gefordert</th><th class="r">Bar</th>'
+      +         '<th class="r">Belege</th><th class="r">Fehlt</th>'
+      +         '<th class="r">Stand danach</th><th>Status</th><th></th>'
       +       '</tr></thead><tbody id="vgKontoVerlauf"></tbody></table>'
       +     '</div>'
       +   '</div>'
@@ -98,6 +104,9 @@
       +   '<div class="vg-links">'
       +     '<div class="vg-sec">Offen</div>'
       +     '<div id="vgOffen" class="vg-liste"></div>'
+      +     '<div class="vg-sec" id="vgWartendKopf" style="display:none">'
+      +       'Wartet auf Bestätigung</div>'
+      +     '<div id="vgWartend" class="vg-liste"></div>'
       +     '<div class="vg-sec vg-sec-klein">Erledigt'
       +       '<span class="vg-treffer" id="vgTreffer"></span></div>'
       +     '<div class="vg-filter">'
@@ -150,8 +159,19 @@
       +     '<button class="vg-wahl-btn" data-erg="teilweise" type="button">Nicht komplett</button>'
       +   '</div>'
       +   '<div class="vg-felder" style="margin-top:14px">'
+      +     '<div id="vgKasseFeld" style="display:none">'
+      +       '<label for="vgKasseGezaehlt">Gezählter Kassenbestand</label>'
+      +       '<input id="vgKasseGezaehlt" type="text" inputmode="decimal" placeholder="850,00">'
+      +       '<div class="vg-kasse-hinweis" id="vgKasseHinweis"></div></div>'
       +     '<div id="vgHakenBetragFeld"><label for="vgHakenBetrag">Tatsächlich erhalten</label>'
       +       '<input id="vgHakenBetrag" type="text" inputmode="decimal" placeholder="500,00"></div>'
+      +     '<div id="vgAbzugFeld"><label for="vgAbzug">Abzug: Auslagen oder Gutschrift</label>'
+      +       '<input id="vgAbzug" type="text" inputmode="decimal" placeholder="0,00">'
+      +       '<div class="vg-kasse-hinweis" id="vgAbzugHinweis">'
+      +         'Was der Fahrer ausgelegt hat oder was ihr ihm schuldet.</div></div>'
+      +     '<div id="vgAbzugGrundFeld" style="display:none">'
+      +       '<label for="vgAbzugGrund">Wofür?</label>'
+      +       '<input id="vgAbzugGrund" type="text" placeholder="z.B. getankt + Wäsche"></div>'
       +     '<div><label for="vgHakenText">Hinweis <span id="vgHakenPflicht"></span></label>'
       +       '<input id="vgHakenText" type="text" placeholder="z.B. Rest nächste Woche"></div>'
       +   '</div>'
@@ -189,6 +209,29 @@
       +   '<div class="vg-modal-foot">'
       +     '<button class="vg-btn" id="vgStapelAbbruch" type="button">Abbrechen</button>'
       +     '<button class="vg-btn vg-btn-green" id="vgStapelOk" type="button">Vorgänge anlegen</button>'
+      +   '</div>'
+      + '</div>'
+      /* Bestätigen (Vier-Augen-Prinzip) */
+      + '<div class="vg-modal" id="vgOkModal" style="display:none" role="dialog" aria-modal="true">'
+      +   '<h3 id="vgOkTitel">Geldeingang bestätigen</h3>'
+      +   '<p class="vg-modal-sub" id="vgOkSub"></p>'
+      +   '<div class="vg-felder">'
+      +     '<div><label for="vgOkBetrag">Tatsächlich in der Kasse</label>'
+      +       '<input id="vgOkBetrag" type="text" inputmode="decimal"></div>'
+      +     '<div><label for="vgOkAbzug">Abzug (Auslagen/Gutschrift)</label>'
+      +       '<input id="vgOkAbzug" type="text" inputmode="decimal">'
+      +       '<div class="vg-kasse-hinweis" id="vgOkAbzugGrund"></div></div>'
+      +     '<div><label for="vgOkText">Hinweis (optional)</label>'
+      +       '<input id="vgOkText" type="text" placeholder="z.B. in den Tresor gelegt"></div>'
+      +   '</div>'
+      +   '<label class="vg-haken-rest" id="vgOkRestZeile" style="display:none">'
+      +     '<input type="checkbox" id="vgOkRestHaken" checked>'
+      +     '<span>Fehlbetrag <b id="vgOkRestBetrag"></b> in die nächste Woche mitnehmen</span>'
+      +   '</label>'
+      +   '<div class="vg-msg" id="vgOkMsg"></div>'
+      +   '<div class="vg-modal-foot">'
+      +     '<button class="vg-btn" id="vgOkAbbruch" type="button">Abbrechen</button>'
+      +     '<button class="vg-btn vg-btn-green" id="vgOkSenden" type="button">Bestätigen</button>'
       +   '</div>'
       + '</div>'
       /* Bearbeiten */
@@ -239,6 +282,10 @@
     document.getElementById("vgEditAbbruch").onclick = dialogeZu;
     document.getElementById("vgEditOk").onclick = editSenden;
     document.getElementById("vgEditStorno").onclick = stornoStarten;
+    document.getElementById("vgOkAbbruch").onclick = dialogeZu;
+    document.getElementById("vgOkSenden").onclick = bestaetigenSenden;
+    document.getElementById("vgOkBetrag").addEventListener("input", okRestAktualisieren);
+    document.getElementById("vgOkAbzug").addEventListener("input", okRestAktualisieren);
     document.getElementById("vgKommentarOk").onclick = kommentarSenden;
     document.getElementById("vgWiederOeffnen").onclick = wiederOeffnen;
     [].slice.call(document.querySelectorAll(".vg-wahl-btn")).forEach(function (b) {
@@ -257,7 +304,7 @@
   }
 
   function dialogeZu() {
-    ["vgBackdrop", "vgHakenModal", "vgDetailModal", "vgStapelModal", "vgEditModal"].forEach(function (id) {
+    ["vgBackdrop", "vgHakenModal", "vgDetailModal", "vgStapelModal", "vgEditModal", "vgOkModal"].forEach(function (id) {
       var e = document.getElementById(id); if (e) e.style.display = "none";
     });
     OFFENES_DETAIL = null;
@@ -298,6 +345,8 @@
         document.getElementById("vgKontoKacheln").innerHTML =
           kachel("Offen insgesamt", d.summe_offen + " €", d.anzahl_mit_offen ? "rot" : "")
           + kachel("Fahrer mit offenem Betrag", String(d.anzahl_mit_offen))
+          + kachel("Guthaben der Fahrer", d.summe_guthaben + " €",
+                   d.summe_guthaben !== "0,00" ? "gruen" : "")
           + kachel("Abgeschrieben", d.summe_abgeschrieben + " €");
 
         document.getElementById("vgKontoBody").innerHTML = d.zeilen.length
@@ -307,18 +356,19 @@
                 +   (z.aktiv ? "" : ' <span class="vg-badge">ausgeschieden</span>') + '</td>'
                 + '<td class="r geld ' + (z.offen_cent ? "minus" : "") + '" data-sp="Offen">' + esc(z.offen) + '</td>'
                 + '<td class="r geld" data-sp="Gestellt">' + esc(z.gestellt) + '</td>'
-                + '<td class="r geld" data-sp="Erhalten">' + esc(z.erhalten) + '</td>'
+                + '<td class="r geld" data-sp="Bar">' + esc(z.erhalten) + '</td>'
+                + '<td class="r geld" data-sp="Belege">' + (z.abzug && z.abzug !== "0,00" ? esc(z.abzug) : "–") + '</td>'
                 + '<td class="r geld" data-sp="Abgeschrieben">' + (z.abgeschrieben_cent ? esc(z.abgeschrieben) : "–") + '</td>'
                 + '<td data-sp="Letzte Zahlung">' + (z.letzte_zahlung ? esc(datumKurz(z.letzte_zahlung.slice(0, 10))) : "–") + '</td>'
                 + '<td class="r"><button class="vg-mini" data-konto="' + z.mitarbeiter_id
                 +   '" type="button">Historie</button></td></tr>';
             }).join("")
-          : '<tr><td colspan="7" class="vg-leer">Noch keine Fahrer angelegt.</td></tr>';
+          : '<tr><td colspan="8" class="vg-leer">Noch keine Fahrer angelegt.</td></tr>';
 
         document.getElementById("vgKontoFuss").innerHTML = d.zeilen.length
           ? '<tr><td>' + d.zeilen.length + ' Fahrer</td>'
             + '<td class="r geld">' + esc(d.summe_offen) + '</td>'
-            + '<td colspan="2"></td>'
+            + '<td colspan="3"></td>'
             + '<td class="r geld">' + esc(d.summe_abgeschrieben) + '</td>'
             + '<td colspan="2"></td></tr>'
           : "";
@@ -344,9 +394,12 @@
         document.getElementById("vgKontoDetail").style.display = "";
         document.getElementById("vgKontoName").textContent = d.name;
         document.getElementById("vgKontoDetailKacheln").innerHTML =
-          kachel("Offen", d.offen + " €", d.offen_cent ? "rot" : "gruen")
+          (d.guthaben_cent
+            ? kachel("Guthaben für den Fahrer", d.guthaben + " €", "gruen")
+            : kachel("Offen", d.offen + " €", d.offen_cent ? "rot" : "gruen"))
           + kachel("Gefordert insgesamt", d.gestellt + " €")
-          + kachel("Erhalten insgesamt", d.erhalten + " €")
+          + kachel("Bar erhalten", d.erhalten + " €")
+          + kachel("Belege verrechnet", d.abzug + " €")
           + kachel("Abgeschrieben", d.abgeschrieben + " €");
 
         document.getElementById("vgKontoVerlauf").innerHTML = d.verlauf.length
@@ -364,7 +417,10 @@
                 +   '<div class="vg-unten">' + (wann ? esc(datumKurz(wann)) : "")
                 +     (z.erledigt_von_name ? " · " + esc(z.erledigt_von_name) : "") + '</div></td>'
                 + '<td class="r geld" data-sp="Gefordert">' + esc(z.soll) + '</td>'
-                + '<td class="r geld" data-sp="Erhalten">' + (z.ist ? esc(z.ist) : "–") + '</td>'
+                + '<td class="r geld" data-sp="Bar">' + (z.ist ? esc(z.ist) : "–") + '</td>'
+                + '<td class="r geld" data-sp="Belege"'
+                +   (z.abzug_grund ? ' title="' + esc(z.abzug_grund) + '"' : "") + '>'
+                +   (z.abzug ? esc(z.abzug) : "–") + '</td>'
                 + '<td class="r geld ' + (z.fehlbetrag ? "minus" : "") + '" data-sp="Fehlt">'
                 +   (z.fehlbetrag ? esc(z.fehlbetrag) : "–") + '</td>'
                 + '<td class="r geld" data-sp="Stand danach">' + esc(z.stand) + '</td>'
@@ -375,7 +431,7 @@
                 +   '<button class="vg-mini" data-detail="' + z.id + '" type="button">Verlauf</button>'
                 + '</td></tr>';
             }).join("")
-          : '<tr><td colspan="7" class="vg-leer">Für diesen Fahrer gibt es noch keinen Vorgang.</td></tr>';
+          : '<tr><td colspan="8" class="vg-leer">Für diesen Fahrer gibt es noch keinen Vorgang.</td></tr>';
 
         document.querySelectorAll("#vgKontoVerlauf [data-detail]").forEach(function (b) {
           b.onclick = function () { detailOeffnen(Number(b.dataset.detail)); };
@@ -408,7 +464,10 @@
           return '<tr>'
             + '<td class="vg-name">' + esc(v.mitarbeiter_name || v.titel) + '</td>'
             + '<td class="r geld" data-sp="Soll">' + esc(v.betrag_soll) + '</td>'
-            + '<td class="r geld" data-sp="Erhalten">' + (v.status === "offen" ? "–" : esc(v.betrag_ist)) + '</td>'
+            + '<td class="r geld" data-sp="Bar">' + (v.status === "offen" ? "–" : esc(v.betrag_ist)) + '</td>'
+            + '<td class="r geld" data-sp="Belege"'
+            +   (v.abzug_grund ? ' title="' + esc(v.abzug_grund) + '"' : "") + '>'
+            +   (v.abzug_cent ? esc(v.abzug) : "–") + '</td>'
             + '<td class="r geld ' + (diff < 0 ? "minus" : (diff > 0 ? "plus" : "")) + '" data-sp="Differenz">'
             +   (v.status === "offen" ? "–"
                 : (diff === 0 ? "0,00" : (diff > 0 ? "+" : "") + alsEuro(diff)))
@@ -424,13 +483,14 @@
                 ? '<button class="vg-mini" data-edit="' + v.id + '" type="button">Bearbeiten</button>' : "")
             +   '<button class="vg-mini" data-detail="' + v.id + '" type="button">Verlauf</button>'
             + '</td></tr>';
-        }).join("") : '<tr><td colspan="6" class="vg-leer">Für diese Woche wurde noch nichts angelegt.</td></tr>';
+        }).join("") : '<tr><td colspan="7" class="vg-leer">Für diese Woche wurde noch nichts angelegt.</td></tr>';
 
         document.getElementById("vgWocheFuss").innerHTML = d.zeilen.length
           ? '<tr><td>' + d.anzahl + ' Fahrer · ' + d.anzahl_offen + ' offen · '
             + d.anzahl_differenz + ' mit Differenz</td>'
             + '<td class="r geld">' + esc(d.summe_soll) + '</td>'
             + '<td class="r geld">' + esc(d.summe_ist) + '</td>'
+            + '<td class="r geld">' + esc(d.summe_abzug || "0,00") + '</td>'
             + '<td class="r geld ' + (d.summe_differenz.indexOf("-") === 0 ? "minus" : "") + '">'
             +   esc(d.summe_differenz) + '</td><td colspan="2"></td></tr>'
           : "";
@@ -603,7 +663,7 @@
   }
 
   /* ── Liste zeichnen ────────────────────────────────────────────── */
-  function zeile(v, erledigt) {
+  function zeile(v, erledigt, wartet) {
     var geld = v.betrag_soll_cent
       ? '<span class="vg-geld">' + esc(v.betrag_soll) + ' €</span>' : "";
     var marken = "";
@@ -613,10 +673,16 @@
       marken += '<span class="vg-badge vg-badge-gelb">nicht komplett</span>';
     if (erledigt && v.ergebnis === "komplett")
       marken += '<span class="vg-badge vg-badge-gruen">komplett</span>';
+    if (wartet) marken += '<span class="vg-badge vg-badge-blau">wartet auf Bestätigung</span>';
 
-    var unten = erledigt
+    var unten = wartet
+      ? esc(v.gemeldet_von_name || "") + " meldet " + esc(v.betrag_ist || "") + " € · "
+        + esc(v.gemeldet_am || "")
+      : erledigt
       ? esc(v.erledigt_von_name || "") + " · " + esc(v.erledigt_am || "")
-        + (v.differenz_cent ? ' · <span class="vg-diff">' + esc(v.betrag_ist) + ' € erhalten</span>' : "")
+        + (v.abzug_cent ? ' · <span class="vg-diff">' + esc(v.abzug) + ' € Beleg'
+            + (v.abzug_grund ? " (" + esc(v.abzug_grund) + ")" : "") + '</span>' : "")
+        + (v.differenz_cent ? ' · <span class="vg-diff">' + esc(v.betrag_ist) + ' € bar</span>' : "")
       : (v.faellig_am ? "fällig " + esc(datumKurz(v.faellig_am)) : "")
         + (v.erstellt_von_name ? " · von " + esc(v.erstellt_von_name) : "");
 
@@ -626,7 +692,9 @@
       +   '<div class="vg-unten">' + unten + '</div>'
       + '</div>'
       + '<div class="vg-zeile-akt">'
-      +   (!erledigt && ZUSTAND.darf_bearbeiten
+      +   (wartet && ZUSTAND.darf_bearbeiten
+          ? '<button class="vg-mini vg-mini-green" data-ok="' + v.id + '" type="button">Bestätigen</button>' : "")
+      +   (!erledigt && !wartet && ZUSTAND.darf_bearbeiten
           ? '<button class="vg-mini vg-mini-green" data-haken="' + v.id + '" type="button">Abhaken</button>' : "")
       +   (ZUSTAND.darf_bearbeiten
           ? '<button class="vg-mini" data-edit="' + v.id + '" type="button">Bearbeiten</button>' : "")
@@ -648,6 +716,14 @@
     o.innerHTML = ZUSTAND.offen.length
       ? ZUSTAND.offen.map(function (v) { return zeile(v, false); }).join("")
       : '<div class="vg-leer">Nichts offen. Alles erledigt.</div>';
+    /* Vier-Augen-Prinzip: gemeldet, aber noch nicht gegengezeichnet. Eigener
+       Abschnitt, damit die Buchhaltung ihre Arbeit sofort sieht. */
+    var w = document.getElementById("vgWartend");
+    var wKopf = document.getElementById("vgWartendKopf");
+    var wartend = ZUSTAND.wartend || [];
+    wKopf.style.display = wartend.length ? "" : "none";
+    w.innerHTML = wartend.map(function (v) { return zeile(v, false, true); }).join("");
+
     e.innerHTML = ZUSTAND.erledigt.length
       ? ZUSTAND.erledigt.map(function (v) { return zeile(v, true); }).join("")
       : '<div class="vg-leer">Noch nichts erledigt.</div>';
@@ -661,7 +737,14 @@
     var karte = document.getElementById("vgNeuKarte");
     if (karte) karte.style.display = ZUSTAND.darf_bearbeiten ? "" : "none";
 
-    var listen = "#vgOffen, #vgErledigt";
+    /* Den Schalter sieht nur, wer ihn umlegen darf - der Inhaber. */
+    var schalter = document.getElementById("vgVierAugen");
+    if (schalter) {
+      schalter.style.display = DARF_EINSTELLEN ? "" : "none";
+      document.getElementById("vgVierAugenAn").checked = !!ZUSTAND.vier_augen;
+    }
+
+    var listen = "#vgOffen, #vgWartend, #vgErledigt";
     listen.split(", ").forEach(function (wo) {
       document.querySelectorAll(wo + " [data-haken]").forEach(function (b) {
         b.onclick = function () { hakenOeffnen(Number(b.dataset.haken)); };
@@ -672,12 +755,15 @@
       document.querySelectorAll(wo + " [data-edit]").forEach(function (b) {
         b.onclick = function () { editOeffnen(Number(b.dataset.edit)); };
       });
+      document.querySelectorAll(wo + " [data-ok]").forEach(function (b) {
+        b.onclick = function () { bestaetigenOeffnen(Number(b.dataset.ok)); };
+      });
     });
     sidebarZahl(ZUSTAND.anzahl_offen || 0);
   }
 
   function finde(id) {
-    return ZUSTAND.offen.concat(ZUSTAND.erledigt)
+    return ZUSTAND.offen.concat(ZUSTAND.wartend || [], ZUSTAND.erledigt)
       .filter(function (v) { return v.id === id; })[0] || {};
   }
 
@@ -797,6 +883,7 @@
 
   /* ── Abhaken ───────────────────────────────────────────────────── */
   var HAKEN_SOLL = 0;
+  var KASSE_SOLL = 0;
 
   function hakenOeffnen(id, quelle) {
     var v = (quelle || []).filter(function (x) { return x.id === id; })[0] || finde(id);
@@ -814,7 +901,33 @@
     });
     document.getElementById("vgHakenPflicht").textContent = "(optional)";
     document.getElementById("vgRestHaken").checked = true;
+    document.getElementById("vgAbzug").value = "";
+    document.getElementById("vgAbzugGrund").value = "";
+    document.getElementById("vgAbzugFeld").style.display = HAKEN_SOLL ? "" : "none";
+    document.getElementById("vgAbzugGrundFeld").style.display = "none";
     restZeileAktualisieren();
+
+    /* Kasseninventur: der gezählte Bestand wird gegen das gerechnet, was laut
+       Vorgängen eingegangen sein müsste. Erst dann ist der Haken etwas wert. */
+    var kasse = v.art === "kasseninventur";
+    document.getElementById("vgKasseFeld").style.display = kasse ? "" : "none";
+    document.getElementById("vgKasseGezaehlt").value = "";
+    document.getElementById("vgKasseHinweis").textContent = "";
+    if (kasse) {
+      fetch("/vorgaenge/kasse", { headers: kopf() })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d) return;
+          KASSE_SOLL = d.soll_cent || 0;
+          var text = "Erwartet: " + d.soll + " € aus " + d.zeilen.length
+            + (d.zeilen.length === 1 ? " Eingang" : " Eingängen") + " heute.";
+          if (d.wartet_auf_bestaetigung) {
+            text += " " + d.wartet_auf_bestaetigung + " weitere ("
+              + d.wartet_summe + " €) warten noch auf Bestätigung.";
+          }
+          document.getElementById("vgKasseHinweis").textContent = text;
+        }).catch(function () {});
+    }
     meldung("vgHakenMsg", "");
     document.getElementById("vgBackdrop").style.display = "block";
     document.getElementById("vgHakenModal").style.display = "block";
@@ -875,6 +988,76 @@
       }).catch(function () {
         kasten.innerHTML = '<div class="vg-leer">Auskunft nicht verfügbar.</div>';
       });
+  }
+
+  /* ── Bestätigen: das zweite Augenpaar ───────────────────────────── */
+  var OK_SOLL = 0;
+
+  function bestaetigenOeffnen(id) {
+    var v = finde(id);
+    OFFENES_DETAIL = id;
+    OK_SOLL = v.betrag_soll_cent || 0;
+    document.getElementById("vgOkTitel").textContent = v.titel || "Bestätigen";
+    document.getElementById("vgOkSub").textContent =
+      (v.gemeldet_von_name || "Jemand") + " hat " + (v.betrag_ist || "0,00")
+      + " € gemeldet" + (v.gemeldet_am ? " am " + v.gemeldet_am : "")
+      + ". Gefordert waren " + (v.betrag_soll || "0,00") + " €.";
+    document.getElementById("vgOkBetrag").value = v.betrag_ist || "";
+    document.getElementById("vgOkAbzug").value = v.abzug || "";
+    document.getElementById("vgOkAbzugGrund").textContent =
+      v.abzug_grund ? "Grund: " + v.abzug_grund : "";
+    document.getElementById("vgOkText").value = "";
+    document.getElementById("vgOkRestHaken").checked = true;
+    okRestAktualisieren();
+    meldung("vgOkMsg", "");
+    document.getElementById("vgBackdrop").style.display = "block";
+    document.getElementById("vgOkModal").style.display = "block";
+  }
+
+  function okRestAktualisieren() {
+    var rest = OK_SOLL - alsCent(document.getElementById("vgOkBetrag").value)
+      - alsCent(document.getElementById("vgOkAbzug").value);
+    var zeile = document.getElementById("vgOkRestZeile");
+    var text = document.getElementById("vgOkRestZeile").querySelector("span");
+    if (rest > 0) {
+      document.getElementById("vgOkRestBetrag").textContent = alsEuro(rest) + " €";
+      text.innerHTML = 'Fehlbetrag <b id="vgOkRestBetrag">' + alsEuro(rest)
+        + ' €</b> in die nächste Woche mitnehmen';
+      zeile.style.display = "";
+    } else if (rest < 0) {
+      /* Guthaben wandert immer mit - hier nur zur Information, kein Häkchen. */
+      text.innerHTML = 'Guthaben <b>' + alsEuro(-rest)
+        + ' €</b> wird in die nächste Woche mitgenommen';
+      document.getElementById("vgOkRestHaken").checked = true;
+      zeile.style.display = "";
+    } else {
+      zeile.style.display = "none";
+    }
+  }
+
+  function bestaetigenSenden() {
+    var restAn = document.getElementById("vgOkRestZeile").style.display !== "none"
+      && document.getElementById("vgOkRestHaken").checked;
+    fetch("/vorgaenge/" + OFFENES_DETAIL + "/bestaetigen", {
+      method: "POST", headers: kopf({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        betrag: document.getElementById("vgOkBetrag").value.trim(),
+        abzug: document.getElementById("vgOkAbzug").value.trim(),
+        hinweis: document.getElementById("vgOkText").value.trim(),
+        rest_uebernehmen: restAn
+      })
+    }).then(function (r) {
+      if (!r.ok) return fehlertext(r).then(function (t) { meldung("vgOkMsg", t, "fehler"); });
+      return r.json().then(function (d) {
+        dialogeZu();
+        nachAenderung();
+        if (d.rest_vorgang) {
+          fcInfo("Rest mitgenommen",
+            "Der Fehlbetrag von " + d.rest + " € steht jetzt in der Woche "
+            + d.rest_vorgang.periode + ".", "info");
+        }
+      });
+    }).catch(function () { meldung("vgOkMsg", "Verbindung fehlgeschlagen.", "fehler"); });
   }
 
   /* ── Bearbeiten und Stornieren ─────────────────────────────────── */
@@ -977,13 +1160,44 @@
     return n * 100 + parseInt((rest + "00").slice(0, 2), 10);
   }
 
+  function kasseHinweisAktualisieren() {
+    var feld = document.getElementById("vgKasseGezaehlt");
+    var kasten = document.getElementById("vgKasseHinweis");
+    if (!feld || document.getElementById("vgKasseFeld").style.display === "none") return;
+    var wert = (feld.value || "").trim();
+    if (!wert) return;
+    var d = alsCent(wert) - KASSE_SOLL;
+    kasten.textContent = "Erwartet: " + alsEuro(KASSE_SOLL) + " € · "
+      + (d === 0 ? "stimmt überein."
+         : (d > 0 ? "Überschuss " : "Fehlbetrag ") + alsEuro(Math.abs(d)) + " €");
+    kasten.className = "vg-kasse-hinweis" + (d === 0 ? " ok" : " warn");
+  }
+
   function restZeileAktualisieren() {
     var zeile = document.getElementById("vgRestZeile");
-    var teil = (document.querySelector(".vg-wahl-btn.on") || {}).dataset
-      && document.querySelector(".vg-wahl-btn.on").dataset.erg === "teilweise";
     var ist = alsCent(document.getElementById("vgHakenBetrag").value);
-    var rest = HAKEN_SOLL - ist;
-    if (teil && HAKEN_SOLL && rest > 0) {
+    var abzug = alsCent(document.getElementById("vgAbzug").value);
+
+    /* Der Grund ist Pflicht, sobald ein Abzug eingetragen ist - sonst weiß
+       nächste Woche niemand mehr, warum weniger Geld kam. */
+    document.getElementById("vgAbzugGrundFeld").style.display = abzug ? "" : "none";
+
+    /* Was der Fahrer ausgelegt hat, zählt wie Bargeld. */
+    var rest = HAKEN_SOLL - ist - abzug;
+    var hinweis = document.getElementById("vgAbzugHinweis");
+    if (HAKEN_SOLL) {
+      hinweis.textContent = abzug
+        ? "Bar " + alsEuro(ist) + " € + Beleg " + alsEuro(abzug) + " € = "
+          + alsEuro(ist + abzug) + " € von " + alsEuro(HAKEN_SOLL) + " €"
+          + (rest > 0 ? " · es fehlen " + alsEuro(rest) + " €"
+             : rest < 0 ? " · Guthaben " + alsEuro(-rest) + " € für den Fahrer"
+             : " · geht genau auf")
+        : "Was der Fahrer ausgelegt hat oder was ihr ihm schuldet.";
+      hinweis.className = "vg-kasse-hinweis"
+        + (!abzug ? "" : rest > 0 ? " warn" : " ok");
+    }
+
+    if (HAKEN_SOLL && rest > 0) {
       document.getElementById("vgRestBetrag").textContent = alsEuro(rest) + " €";
       zeile.style.display = "";
     } else {
@@ -1001,7 +1215,22 @@
       hinweis: document.getElementById("vgHakenText").value.trim(),
       rest_uebernehmen: restAn
     };
-    if (erg === "teilweise" && !koerper.hinweis) {
+    if (document.getElementById("vgKasseFeld").style.display !== "none") {
+      koerper.kasse_gezaehlt = document.getElementById("vgKasseGezaehlt").value.trim();
+    }
+    var abzug = document.getElementById("vgAbzug").value.trim();
+    if (abzug) {
+      koerper.abzug = abzug;
+      koerper.abzug_grund = document.getElementById("vgAbzugGrund").value.trim();
+      if (!koerper.abzug_grund) {
+        meldung("vgHakenMsg", "Bitte kurz angeben, wofür der Abzug ist.", "fehler");
+        return;
+      }
+    }
+    var offenNachAbzug = HAKEN_SOLL
+      - alsCent(document.getElementById("vgHakenBetrag").value)
+      - alsCent(document.getElementById("vgAbzug").value);
+    if (erg === "teilweise" && offenNachAbzug > 0 && !koerper.hinweis) {
       meldung("vgHakenMsg", "Bitte kurz beschreiben, was gefehlt hat.", "fehler");
       return;
     }
@@ -1014,7 +1243,11 @@
         dialogeZu();
         laden();
         if (TAB === "woche") wocheLaden(AKTUELLE_KW);
-        if (d.rest_vorgang) {
+        if (d.status === "gemeldet") {
+          fcInfo("Gemeldet",
+            "Der Eingang ist gemeldet. Er gilt als erledigt, sobald eine zweite "
+            + "Person ihn bestätigt hat.", "info");
+        } else if (d.rest_vorgang) {
           fcInfo("Rest weitergeführt",
             "Der Fehlbetrag von " + d.rest + " € steht jetzt als eigener Vorgang in der Liste.",
             "info");
@@ -1214,12 +1447,40 @@
               if (k.style.display === "none") diagnoseLaden();
               else k.style.display = "none";
             };
+            fetch("/vorgaenge/einstellungen", { headers: kopf() })
+              .then(function (r) { return r.ok ? r.json() : null; })
+              .then(function (d) {
+                if (!d) return;
+                DARF_EINSTELLEN = !!d.darf_aendern;
+                zeichnen();
+              }).catch(function () {});
+            document.getElementById("vgVierAugenAn").onchange = function () {
+              var an = document.getElementById("vgVierAugenAn").checked;
+              fetch("/vorgaenge/einstellungen", {
+                method: "POST", headers: kopf({ "Content-Type": "application/json" }),
+                body: JSON.stringify({ vier_augen: an })
+              }).then(function (r) {
+                if (!r.ok) {
+                  document.getElementById("vgVierAugenAn").checked = !an;
+                  return fehlertext(r).then(function (t) { fcInfo("Nicht möglich", t); });
+                }
+                laden();
+                fcInfo(an ? "Vier-Augen-Prinzip an" : "Vier-Augen-Prinzip aus",
+                  an ? "Wer kassiert, meldet den Eingang. Erledigt ist er erst, wenn "
+                     + "eine zweite Person ihn bestätigt hat."
+                     : "Abhaken schließt einen Vorgang künftig sofort ab.", "info");
+              }).catch(function () {});
+            };
             document.getElementById("vgKontoZurueck").onclick = function () {
               KONTO_ID = 0; kontenLaden();
             };
 
             // Restbetrag-Zeile mitrechnen, waehrend getippt wird
             document.getElementById("vgHakenBetrag").addEventListener("input", restZeileAktualisieren);
+            document.getElementById("vgKasseGezaehlt")
+              .addEventListener("input", kasseHinweisAktualisieren);
+            document.getElementById("vgAbzug")
+              .addEventListener("input", restZeileAktualisieren);
             document.querySelectorAll(".vg-wahl-btn").forEach(function (b) {
               b.addEventListener("click", restZeileAktualisieren);
             });

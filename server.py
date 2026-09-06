@@ -210,6 +210,17 @@ _NACHTRAEGLICHE_SPALTEN = [
     ("firma", "max_benutzer", "INTEGER DEFAULT 1"),
     ("vorgang", "periode", "VARCHAR DEFAULT ''"),
     ("vorgang", "nachfolger_von", "INTEGER DEFAULT 0"),
+    # Vier-Augen-Prinzip: wer hat das Geld gemeldet, wer hat es bestaetigt.
+    ("vorgang", "gemeldet_von", "INTEGER DEFAULT 0"),
+    ("vorgang", "gemeldet_von_name", "VARCHAR DEFAULT ''"),
+    ("vorgang", "gemeldet_am", "TIMESTAMP"),
+    # Kassenabgleich: gezaehlter Bestand gegen das, was da sein muesste.
+    ("vorgang", "kasse_gezaehlt_cent", "INTEGER DEFAULT 0"),
+    ("vorgang", "kasse_soll_cent", "INTEGER DEFAULT 0"),
+    ("firma", "vier_augen", "BOOLEAN DEFAULT FALSE"),
+    # Auslagen des Fahrers oder Gutschriften, die gegen die Forderung laufen.
+    ("vorgang", "abzug_cent", "INTEGER DEFAULT 0"),
+    ("vorgang", "abzug_grund", "VARCHAR DEFAULT ''"),
 ]
 
 
@@ -260,6 +271,8 @@ class Firma(SQLModel, table=True):
     profil_aenderungen: int = 0           # 0 = darf noch einmal aendern, danach gesperrt
     max_firmen: int = 1                   # nur bei "gruppe": wie viele Unternehmen erlaubt sind
     max_benutzer: int = 1                 # wie viele Personen in dieser Firma arbeiten duerfen
+    # Vier-Augen-Prinzip beim Abkassieren: erst melden, dann bestaetigen.
+    vier_augen: bool = False
     notes: str = ""                       # interne Admin-Notizen (Kunde sieht sie nie)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -349,7 +362,16 @@ class Vorgang(SQLModel, table=True):
     betrag_soll_cent: int = 0
     betrag_ist_cent: int = 0
 
-    status: str = Field(default="offen", index=True)   # offen | erledigt
+    # Was der Fahrer ausgelegt hat (Tanken, Waesche, Ersatzteile) oder was der
+    # Betrieb ihm schuldet. Laeuft gegen die Forderung: erhalten + Abzug muss
+    # die Forderung decken. Ein Beleg ist kein Fehlbetrag.
+    abzug_cent: int = 0
+    abzug_grund: str = ""
+
+    # offen | gemeldet | erledigt | storniert
+    # "gemeldet" gibt es nur bei eingeschaltetem Vier-Augen-Prinzip: die
+    # Disposition hat kassiert, die Buchhaltung hat es noch nicht bestaetigt.
+    status: str = Field(default="offen", index=True)
     ergebnis: str = ""                                 # komplett | teilweise
     faellig_am: Optional[date] = None
 
@@ -361,6 +383,15 @@ class Vorgang(SQLModel, table=True):
     erstellt_von: int = 0
     erstellt_von_name: str = ""
     erstellt_am: datetime = Field(default_factory=datetime.utcnow)
+    # Wer hat kassiert und gemeldet (Vier-Augen-Prinzip)?
+    gemeldet_von: int = 0
+    gemeldet_von_name: str = ""
+    gemeldet_am: Optional[datetime] = None
+
+    # Kassenabgleich: was gezaehlt wurde und was rechnerisch drin sein muesste.
+    kasse_gezaehlt_cent: int = 0
+    kasse_soll_cent: int = 0
+
     erledigt_von: int = 0
     erledigt_von_name: str = ""
     erledigt_am: Optional[datetime] = None
@@ -3402,6 +3433,18 @@ def _cent(betrag) -> int:
     return -wert if minus else wert
 
 
+def _rest_cent(v: Vorgang) -> int:
+    """Was nach dem Abkassieren noch offen ist.
+
+    Gefordert minus bar erhalten minus das, was der Fahrer ausgelegt hat.
+    Ein Beleg ueber 80 EUR ist kein Fehlbetrag - das Geld ist geflossen, nur
+    nicht in die Kasse. Ist das Ergebnis negativ, schuldet der Betrieb dem
+    Fahrer etwas: ein Guthaben.
+    """
+    return ((v.betrag_soll_cent or 0) - (v.betrag_ist_cent or 0)
+            - (v.abzug_cent or 0))
+
+
 def _euro(cent: int) -> str:
     """Deutsche Schreibweise: 137540 -> "1.375,40"."""
     text = f"{(cent or 0) / 100:,.2f}"          # 1,375.40
@@ -3451,7 +3494,12 @@ def _vorgang_dict(v: Vorgang, ereignisse: Optional[list] = None) -> dict:
         "betrag_soll_cent": v.betrag_soll_cent or 0,
         "betrag_ist": _euro(v.betrag_ist_cent),
         "betrag_ist_cent": v.betrag_ist_cent or 0,
-        "differenz_cent": (v.betrag_ist_cent or 0) - (v.betrag_soll_cent or 0),
+        "abzug": _euro(v.abzug_cent) if v.abzug_cent else "",
+        "abzug_cent": v.abzug_cent or 0,
+        "abzug_grund": v.abzug_grund or "",
+        # Belege zaehlen wie Bargeld: wer 80 EUR getankt hat, hat nicht 80 EUR
+        # zu wenig gebracht.
+        "differenz_cent": -_rest_cent(v),
         "status": v.status,
         "ergebnis": v.ergebnis or "",
         "periode": v.periode or "",
@@ -3463,6 +3511,13 @@ def _vorgang_dict(v: Vorgang, ereignisse: Optional[list] = None) -> dict:
         "erstellt_am": v.erstellt_am.strftime("%d.%m.%Y %H:%M") if v.erstellt_am else "",
         "erledigt_von_name": v.erledigt_von_name or "",
         "erledigt_am": v.erledigt_am.strftime("%d.%m.%Y %H:%M") if v.erledigt_am else None,
+        "gemeldet_von_name": v.gemeldet_von_name or "",
+        "gemeldet_von": v.gemeldet_von or 0,
+        "gemeldet_am": v.gemeldet_am.strftime("%d.%m.%Y %H:%M") if v.gemeldet_am else None,
+        "kasse_gezaehlt": _euro(v.kasse_gezaehlt_cent) if v.kasse_gezaehlt_cent else "",
+        "kasse_soll": _euro(v.kasse_soll_cent) if v.kasse_gezaehlt_cent else "",
+        "kasse_differenz_cent": (v.kasse_gezaehlt_cent - v.kasse_soll_cent)
+                                if v.kasse_gezaehlt_cent else 0,
     }
     if ereignisse is not None:
         d["verlauf"] = [{
@@ -3721,11 +3776,18 @@ def wochenvorschlag(kw: str = "", lohn_monat: str = "", lohn_woche: int = 0,
     # Wer für diese Woche schon einen Vorgang hat - mitsamt dem Betrag, der
     # dort wirklich steht. Der kann vom Lohn-Vorschlag abweichen, wenn jemand
     # ihn beim Anlegen geändert hat; angezeigt gehört dann der echte Wert.
-    schon_da = {}
+    #
+    # Ein reiner Restbetrag aus der Vorwoche ist KEINE erledigte Wochen-
+    # abrechnung: er wird zum Lohn-Betrag dieser Woche addiert, damit der
+    # Fahrer eine Forderung bekommt statt zweier nebeneinander.
+    schon_da, offene_reste = {}, {}
     for v in session.exec(select(Vorgang).where(
             Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
             Vorgang.periode == woche, Vorgang.status != "storniert")).all():
-        schon_da[v.mitarbeiter_id] = v
+        if v.nachfolger_von and v.status == "offen":
+            offene_reste[v.mitarbeiter_id] = v
+        else:
+            schon_da[v.mitarbeiter_id] = v
 
     fahrer = [m for m in session.exec(
         select(Mitarbeiter).where(Mitarbeiter.firma_id == firma.id)).all() if m.aktiv]
@@ -3748,17 +3810,7 @@ def wochenvorschlag(kw: str = "", lohn_monat: str = "", lohn_woche: int = 0,
         "lohn_ohne_mitarbeiter": ohne_mitarbeiter,
         "lohn_automatisch": lohn["automatisch"],
         "lohn_alternativen": lohn["alternativen"],
-        "fahrer": [{
-            "mitarbeiter_id": m.id,
-            "name": m.name,
-            "vorschlag": _euro(lohn["werte"].get(_name_schluessel(m.name), 0)),
-            "vorschlag_cent": lohn["werte"].get(_name_schluessel(m.name), 0),
-            "schon_angelegt": m.id in schon_da,
-            "vorgang_id": schon_da[m.id].id if m.id in schon_da else None,
-            "angelegt_betrag": (_euro(schon_da[m.id].betrag_soll_cent)
-                                if m.id in schon_da else ""),
-            "angelegt_status": schon_da[m.id].status if m.id in schon_da else "",
-        } for m in fahrer],
+        "fahrer": [_vorschlag_zeile(m, lohn, schon_da, offene_reste) for m in fahrer],
     }
 
 
@@ -3772,6 +3824,30 @@ class StapelRequest(BaseModel):
     zeilen: list
     faellig_am: Optional[str] = None
     hinweis: Optional[str] = None
+
+
+def _vorschlag_zeile(m: Mitarbeiter, lohn: dict, schon_da: dict, reste: dict) -> dict:
+    """Eine Zeile im Dialog „Woche anlegen"."""
+    aus_lohn = lohn["werte"].get(_name_schluessel(m.name), 0)
+    rest_v = reste.get(m.id)
+    rest = (rest_v.betrag_soll_cent or 0) if rest_v is not None else 0
+    gesamt = aus_lohn + rest
+    da = schon_da.get(m.id)
+    return {
+        "mitarbeiter_id": m.id,
+        "name": m.name,
+        "vorschlag": _euro(gesamt),
+        "vorschlag_cent": gesamt,
+        "aus_lohn": _euro(aus_lohn),
+        "aus_lohn_cent": aus_lohn,
+        "rest": _euro(rest) if rest else "",
+        "rest_cent": rest,
+        "rest_aus": (rest_v.titel if rest_v is not None else ""),
+        "schon_angelegt": da is not None,
+        "vorgang_id": da.id if da is not None else None,
+        "angelegt_betrag": _euro(da.betrag_soll_cent) if da is not None else "",
+        "angelegt_status": da.status if da is not None else "",
+    }
 
 
 @app.get("/vorgaenge/lohn-diagnose")
@@ -3842,10 +3918,17 @@ def vorgaenge_stapel(data: StapelRequest,
     woche = _kw_text(montag)
     faellig = _datum_oder_none(data.faellig_am) or (montag + timedelta(days=7))
 
-    vorhanden = {v.mitarbeiter_id for v in session.exec(
-        select(Vorgang).where(Vorgang.firma_id == firma.id,
-                              Vorgang.art == "fahrer_kassieren",
-                              Vorgang.periode == woche)).all()}
+    # Was gibt es für diese Woche schon? Ein reiner Restbetrag aus der Vorwoche
+    # zählt NICHT als erledigte Wochenabrechnung - er wird in sie hineingerechnet.
+    # Sonst stünden zwei Forderungen nebeneinander, die niemand addiert.
+    vorhanden, reste = {}, {}
+    for v in session.exec(select(Vorgang).where(
+            Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
+            Vorgang.periode == woche, Vorgang.status != "storniert")).all():
+        if v.nachfolger_von and v.status == "offen":
+            reste[v.mitarbeiter_id] = v
+        else:
+            vorhanden[v.mitarbeiter_id] = v
 
     angelegt, uebersprungen = [], 0
     for roh in (data.zeilen or []):
@@ -3863,6 +3946,27 @@ def vorgaenge_stapel(data: StapelRequest,
         if cent <= 0:
             uebersprungen += 1      # ohne Betrag kein Auftrag
             continue
+
+        alt = reste.get(m.id)
+        if alt is not None:
+            # Der Restbetrag dieser Woche wächst zur vollen Wochenforderung.
+            # So bleibt es eine Forderung, ein Verlauf, ein Abhaken - und im
+            # Verlauf ist nachlesbar, woraus sie sich zusammensetzt.
+            frueher = alt.betrag_soll_cent or 0
+            alt.betrag_soll_cent = cent
+            alt.titel = f"{m.name} abkassieren ({woche})"
+            alt.faellig_am = faellig
+            session.add(alt)
+            session.commit(); session.refresh(alt)
+            _ereignis(session, alt, current, "geaendert",
+                      f"Wochenabrechnung {woche} dazugerechnet: "
+                      f"Restbetrag {_euro(frueher)} € → Forderung {_euro(cent)} €.", cent)
+            session.commit()
+            angelegt.append(_vorgang_dict(alt))
+            vorhanden[m.id] = alt
+            reste.pop(m.id, None)
+            continue
+
         v = Vorgang(firma_id=firma.id, art="fahrer_kassieren",
                     schluessel=f"fahrer:{m.id}:{woche}",
                     titel=f"{m.name} abkassieren ({woche})",
@@ -3878,7 +3982,7 @@ def vorgaenge_stapel(data: StapelRequest,
                   (data.hinweis or "").strip() or f"Wochenabrechnung {woche}", cent)
         session.commit()
         angelegt.append(_vorgang_dict(v))
-        vorhanden.add(m.id)
+        vorhanden[m.id] = v
 
     return {"kw": woche, "angelegt": len(angelegt),
             "uebersprungen": uebersprungen, "vorgaenge": angelegt}
@@ -3897,8 +4001,12 @@ def vorgaenge_woche(kw: str = "",
         Vorgang.firma_id == firma.id, Vorgang.periode == woche)).all()
     zeilen.sort(key=lambda v: (v.mitarbeiter_name or v.titel or "").lower())
 
+    # Stornierte gehoeren nicht in die Wochenrechnung.
+    zeilen = [v for v in zeilen if v.status != "storniert"]
+    fertig = [v for v in zeilen if v.status in ("erledigt", "gemeldet")]
     soll = sum(v.betrag_soll_cent or 0 for v in zeilen)
-    ist = sum(v.betrag_ist_cent or 0 for v in zeilen if v.status != "offen")
+    ist = sum(v.betrag_ist_cent or 0 for v in fertig)
+    abzug = sum(v.abzug_cent or 0 for v in fertig)
     offen_cent = sum(v.betrag_soll_cent or 0 for v in zeilen if v.status == "offen")
 
     return {
@@ -3910,13 +4018,95 @@ def vorgaenge_woche(kw: str = "",
         "zeilen": [_vorgang_dict(v) for v in zeilen],
         "summe_soll": _euro(soll),
         "summe_ist": _euro(ist),
+        "summe_abzug": _euro(abzug),
         "summe_offen": _euro(offen_cent),
-        "summe_differenz": _euro(ist - (soll - offen_cent)),
+        # Differenz heisst: was fehlt wirklich. Belege zaehlen wie Bargeld.
+        "summe_differenz": _euro((ist + abzug) - (soll - offen_cent)),
         "anzahl": len(zeilen),
         "anzahl_offen": len([v for v in zeilen if v.status == "offen"]),
-        "anzahl_differenz": len([v for v in zeilen if v.status != "offen"
-                                 and (v.betrag_ist_cent or 0) != (v.betrag_soll_cent or 0)]),
+        "anzahl_differenz": len([v for v in fertig if _rest_cent(v) != 0]),
     }
+
+
+def _woche_sicherstellen(session: Session, firma: Firma):
+    """Legt die Abkassier-Vorgänge der laufenden Woche von allein an.
+
+    Bedingung: im Lohn-Modul steht für den Fahrer ein Betrag unter „Offen".
+    Steht dort nichts, entsteht auch nichts - und sobald die Buchhaltung den
+    Lohn pflegt, wird es beim nächsten Seitenaufruf nachgeholt.
+
+    Was schon angelegt ist, wird NIE überschrieben. Ändert jemand später einen
+    Betrag im Lohn, bleibt die gestellte Forderung stehen; korrigiert wird sie
+    über „Bearbeiten", damit die Änderung im Verlauf steht.
+
+    Ein offener Restbetrag aus der Vorwoche wächst zur Wochenforderung: der
+    Fahrer bekommt eine Zahl, nicht zwei nebeneinander.
+    """
+    heute = date.today()
+    montag = heute - timedelta(days=heute.weekday())
+    woche = _kw_text(montag)
+
+    lohn = _lohn_wochenwerte(session, firma.id, montag)
+    if not lohn["werte"]:
+        return
+
+    schon_da, reste = set(), {}
+    for v in session.exec(select(Vorgang).where(
+            Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
+            Vorgang.periode == woche, Vorgang.status != "storniert")).all():
+        if v.nachfolger_von and v.status == "offen":
+            reste[v.mitarbeiter_id] = v
+        else:
+            schon_da.add(v.mitarbeiter_id)
+
+    faellig = montag + timedelta(days=6)
+    for m in session.exec(select(Mitarbeiter).where(
+            Mitarbeiter.firma_id == firma.id)).all():
+        if not m.aktiv or m.id in schon_da:
+            continue
+        aus_lohn = lohn["werte"].get(_name_schluessel(m.name), 0)
+        if aus_lohn <= 0:
+            continue
+        alt = reste.get(m.id)
+        gesamt = aus_lohn + ((alt.betrag_soll_cent or 0) if alt is not None else 0)
+
+        if alt is not None:
+            frueher = alt.betrag_soll_cent or 0
+            alt.betrag_soll_cent = gesamt
+            alt.titel = f"{m.name} abkassieren ({woche})"
+            alt.faellig_am = faellig
+            session.add(alt)
+            try:
+                session.commit(); session.refresh(alt)
+            except Exception:
+                session.rollback(); continue
+            session.add(VorgangEreignis(
+                vorgang_id=alt.id, firma_id=firma.id, user_name="automatisch",
+                typ="geaendert", betrag_cent=gesamt,
+                text=(f"Wochenabrechnung {woche} dazugerechnet: Restbetrag "
+                      f"{_euro(frueher)} € + {_euro(aus_lohn)} € aus dem Lohn "
+                      f"= {_euro(gesamt)} €.")))
+            session.commit()
+            continue
+
+        v = Vorgang(firma_id=firma.id, art="fahrer_kassieren",
+                    schluessel=f"fahrer:{m.id}:{woche}",
+                    titel=f"{m.name} abkassieren ({woche})",
+                    mitarbeiter_id=m.id, mitarbeiter_name=m.name,
+                    betrag_soll_cent=gesamt, periode=woche, faellig_am=faellig,
+                    erstellt_von_name="automatisch")
+        session.add(v)
+        try:
+            session.commit(); session.refresh(v)
+        except Exception:
+            session.rollback()      # zwei Arbeiter gleichzeitig - einer gewinnt
+            continue
+        session.add(VorgangEreignis(
+            vorgang_id=v.id, firma_id=firma.id, user_name="automatisch",
+            typ="angelegt", betrag_cent=gesamt,
+            text=("Automatisch aus dem Lohn-Modul, " + lohn["monat"]
+                  + ", Woche " + str(lohn["woche_nr"]) + " (Feld „Offen“).")))
+        session.commit()
 
 
 def _kasseninventur_sicherstellen(session: Session, firma: Firma):
@@ -3963,19 +4153,28 @@ def _konto_zahlen(vorgaenge: list) -> dict:
     """Kennzahlen eines Fahrerkontos aus seinen Abkassier-Vorgängen."""
     aktiv = [v for v in vorgaenge if v.status != "storniert"]
     hat_nachfolger = {v.nachfolger_von for v in aktiv if v.nachfolger_von}
-    offen = [v for v in aktiv if v.status == "offen"]
+    # "gemeldet" heisst: kassiert, aber noch nicht gegengezeichnet. Solange
+    # zaehlt der Betrag weiter als offen - bestaetigt ist bestaetigt.
+    offen = [v for v in aktiv if v.status in ("offen", "gemeldet")]
     erledigt = [v for v in aktiv if v.status == "erledigt"]
 
     abgeschrieben = 0
     for v in erledigt:
-        rest = (v.betrag_soll_cent or 0) - (v.betrag_ist_cent or 0)
+        rest = _rest_cent(v)
         if rest > 0 and v.id not in hat_nachfolger:
             abgeschrieben += rest
 
+    # Offene Posten können in der Summe negativ sein: dann schuldet der Betrieb
+    # dem Fahrer etwas, weil er mehr ausgelegt hat als abzuliefern war.
+    saldo = sum(v.betrag_soll_cent or 0 for v in offen)
+
     return {
-        "offen_cent": sum(v.betrag_soll_cent or 0 for v in offen),
-        "gestellt_cent": sum(v.betrag_soll_cent or 0 for v in aktiv),
+        "offen_cent": max(0, saldo),
+        "guthaben_cent": max(0, -saldo),
+        "gestellt_cent": sum(v.betrag_soll_cent or 0 for v in aktiv
+                             if (v.betrag_soll_cent or 0) > 0),
         "erhalten_cent": sum(v.betrag_ist_cent or 0 for v in erledigt),
+        "abzug_cent": sum(v.abzug_cent or 0 for v in erledigt),
         "abgeschrieben_cent": abgeschrieben,
         "anzahl_offen": len(offen),
         "anzahl_gesamt": len(aktiv),
@@ -4013,8 +4212,10 @@ def vorgaenge_konten(current: User = Depends(get_wirk_user),
             "name": person.name if person else (gruppe[0].mitarbeiter_name or "Unbekannt"),
             "aktiv": bool(person.aktiv) if person else False,
             "offen": _euro(z["offen_cent"]), "offen_cent": z["offen_cent"],
+            "guthaben": _euro(z["guthaben_cent"]), "guthaben_cent": z["guthaben_cent"],
             "gestellt": _euro(z["gestellt_cent"]),
             "erhalten": _euro(z["erhalten_cent"]),
+            "abzug": _euro(z["abzug_cent"]),
             "abgeschrieben": _euro(z["abgeschrieben_cent"]),
             "abgeschrieben_cent": z["abgeschrieben_cent"],
             "anzahl_offen": z["anzahl_offen"],
@@ -4026,8 +4227,10 @@ def vorgaenge_konten(current: User = Depends(get_wirk_user),
     for m in leute.values():
         if m.aktiv and m.id not in nach_fahrer:
             zeilen.append({"mitarbeiter_id": m.id, "name": m.name, "aktiv": True,
-                           "offen": "0,00", "offen_cent": 0, "gestellt": "0,00",
-                           "erhalten": "0,00", "abgeschrieben": "0,00",
+                           "offen": "0,00", "offen_cent": 0,
+                           "guthaben": "0,00", "guthaben_cent": 0,
+                           "gestellt": "0,00", "erhalten": "0,00", "abzug": "0,00",
+                           "abgeschrieben": "0,00",
                            "abgeschrieben_cent": 0, "anzahl_offen": 0,
                            "letzte_zahlung": ""})
 
@@ -4035,6 +4238,7 @@ def vorgaenge_konten(current: User = Depends(get_wirk_user),
     return {
         "zeilen": zeilen,
         "summe_offen": _euro(sum(z["offen_cent"] for z in zeilen)),
+        "summe_guthaben": _euro(sum(z["guthaben_cent"] for z in zeilen)),
         "summe_abgeschrieben": _euro(sum(z["abgeschrieben_cent"] for z in zeilen)),
         "anzahl_mit_offen": len([z for z in zeilen if z["offen_cent"]]),
         "darf_bearbeiten": hat_recht(current, "vorgaenge"),
@@ -4059,8 +4263,8 @@ def vorgaenge_fahrerkonto(mitarbeiter_id: int,
     stand = 0
     verlauf = []
     for v in alle:
-        rest = (v.betrag_soll_cent or 0) - (v.betrag_ist_cent or 0)
-        if v.status == "offen":
+        rest = _rest_cent(v)
+        if v.status in ("offen", "gemeldet"):
             stand += v.betrag_soll_cent or 0
         # Erledigte verändern den Stand nicht: entweder ist alles bezahlt, der
         # Rest läuft als eigener Vorgang weiter, oder er wurde abgeschrieben.
@@ -4073,6 +4277,8 @@ def vorgaenge_fahrerkonto(mitarbeiter_id: int,
             "soll": _euro(v.betrag_soll_cent), "soll_cent": v.betrag_soll_cent or 0,
             "ist": _euro(v.betrag_ist_cent) if v.status == "erledigt" else "",
             "ist_cent": v.betrag_ist_cent or 0,
+            "abzug": _euro(v.abzug_cent) if v.abzug_cent else "",
+            "abzug_grund": v.abzug_grund or "",
             "fehlbetrag": _euro(rest) if (v.status == "erledigt" and rest > 0) else "",
             "weitergefuehrt": v.id in hat_nachfolger,
             "aus_vorgang": v.nachfolger_von or 0,
@@ -4092,8 +4298,10 @@ def vorgaenge_fahrerkonto(mitarbeiter_id: int,
         "name": person.name,
         "aktiv": bool(person.aktiv),
         "offen": _euro(z["offen_cent"]), "offen_cent": z["offen_cent"],
+        "guthaben": _euro(z["guthaben_cent"]), "guthaben_cent": z["guthaben_cent"],
         "gestellt": _euro(z["gestellt_cent"]),
         "erhalten": _euro(z["erhalten_cent"]),
+        "abzug": _euro(z["abzug_cent"]),
         "abgeschrieben": _euro(z["abgeschrieben_cent"]),
         "anzahl_offen": z["anzahl_offen"],
         "anzahl_gesamt": z["anzahl_gesamt"],
@@ -4115,12 +4323,17 @@ def vorgaenge_liste(q: str = "", art: str = "", mitarbeiter_id: Optional[int] = 
     """
     firma = _vorgang_firma(current, session, schreibend=False)
     _kasseninventur_sicherstellen(session, firma)
+    _woche_sicherstellen(session, firma)
 
     alle = session.exec(select(Vorgang).where(Vorgang.firma_id == firma.id)).all()
     offen = [v for v in alle if v.status == "offen"]
+    # Gemeldet, aber noch nicht gegengezeichnet - eigene Gruppe, damit die
+    # Buchhaltung auf einen Blick sieht, was auf sie wartet.
+    wartend = [v for v in alle if v.status == "gemeldet"]
     # Stornierte gehören nicht in die Arbeitsliste. Auffindbar bleiben sie
     # über das Fahrerkonto und ihren Verlauf.
     erledigt = [v for v in alle if v.status == "erledigt"]
+    wartend.sort(key=lambda v: (v.gemeldet_am or datetime.min), reverse=True)
     offen.sort(key=lambda v: (v.faellig_am or date.max, -(v.id or 0)))
     erledigt.sort(key=lambda v: (v.erledigt_am or datetime.min), reverse=True)
 
@@ -4150,6 +4363,9 @@ def vorgaenge_liste(q: str = "", art: str = "", mitarbeiter_id: Optional[int] = 
 
     return {
         "offen": [_vorgang_dict(v) for v in offen],
+        "wartend": [_vorgang_dict(v) for v in wartend],
+        "anzahl_wartend": len(wartend),
+        "vier_augen": bool(firma.vier_augen),
         "erledigt": [_vorgang_dict(v) for v in gefiltert[:grenze]],
         "erledigt_gesamt": len(gefiltert),
         "gefiltert": gefiltert_ist,
@@ -4229,6 +4445,209 @@ class VorgangErledigtRequest(BaseModel):
     betrag: Optional[str] = None        # was tatsächlich kam
     hinweis: Optional[str] = None
     rest_uebernehmen: bool = False      # Fehlbetrag als neuen Vorgang weiterführen
+    abzug: Optional[str] = None         # Auslagen des Fahrers / Gutschrift
+    abzug_grund: Optional[str] = None   # wofür
+    kasse_gezaehlt: Optional[str] = None   # nur Kasseninventur: gezählter Bestand
+
+
+def _kasse_soll(session: Session, firma: Firma, tag: date) -> int:
+    """Was müsste an diesem Tag an Bargeld hereingekommen sein?
+
+    Gezählt wird, was an dem Tag als erledigt gemeldet wurde - nicht, was
+    gefordert war. Gefordert ist eine Absicht, erhalten ist eine Tatsache.
+    """
+    summe = 0
+    for v in session.exec(select(Vorgang).where(
+            Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
+            Vorgang.status == "erledigt")).all():
+        wann = v.erledigt_am.date() if v.erledigt_am else None
+        if wann == tag:
+            summe += v.betrag_ist_cent or 0
+    return summe
+
+
+class VorgangEinstellungen(BaseModel):
+    vier_augen: bool
+
+
+@app.get("/vorgaenge/einstellungen")
+def vorgaenge_einstellungen_lesen(current: User = Depends(get_wirk_user),
+                                  session: Session = Depends(get_session)):
+    firma = _vorgang_firma(current, session, schreibend=False)
+    return {"vier_augen": bool(firma.vier_augen),
+            "darf_aendern": (current.rolle or ROLLE_INHABER) == ROLLE_INHABER
+                            or _is_superadmin(current)}
+
+
+@app.post("/vorgaenge/einstellungen")
+def vorgaenge_einstellungen_setzen(data: VorgangEinstellungen,
+                                   current: User = Depends(get_wirk_user),
+                                   session: Session = Depends(get_session)):
+    """Vier-Augen-Prinzip ein- oder ausschalten. Das entscheidet der Inhaber -
+    es ist eine Frage der Betriebsorganisation, nicht der Tagesarbeit."""
+    firma = _vorgang_firma(current, session)
+    if (current.rolle or ROLLE_INHABER) != ROLLE_INHABER and not _is_superadmin(current):
+        raise HTTPException(
+            status_code=403,
+            detail="Das darf nur der Inhaber des Betriebs umstellen.")
+    firma.vier_augen = bool(data.vier_augen)
+    session.add(firma); session.commit()
+    return {"ok": True, "vier_augen": firma.vier_augen}
+
+
+@app.get("/vorgaenge/kasse")
+def vorgaenge_kasse(tag: str = "", current: User = Depends(get_wirk_user),
+                    session: Session = Depends(get_session)):
+    """Was müsste heute in der Kasse sein - und woraus setzt es sich zusammen?"""
+    firma = _vorgang_firma(current, session, schreibend=False)
+    wann = _datum_oder_none(tag) or date.today()
+    zeilen = []
+    for v in session.exec(select(Vorgang).where(
+            Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
+            Vorgang.status == "erledigt")).all():
+        if v.erledigt_am and v.erledigt_am.date() == wann:
+            zeilen.append({
+                "id": v.id,
+                "name": v.mitarbeiter_name or v.titel,
+                "betrag": _euro(v.betrag_ist_cent),
+                "betrag_cent": v.betrag_ist_cent or 0,
+                "wer": v.erledigt_von_name or "",
+                "gemeldet_von": v.gemeldet_von_name or "",
+            })
+    zeilen.sort(key=lambda z: z["name"].lower())
+    soll = sum(z["betrag_cent"] for z in zeilen)
+
+    offen = [v for v in session.exec(select(Vorgang).where(
+        Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
+        Vorgang.status == "gemeldet")).all()]
+
+    return {
+        "tag": wann.isoformat(),
+        "soll": _euro(soll), "soll_cent": soll,
+        "zeilen": zeilen,
+        "wartet_auf_bestaetigung": len(offen),
+        "wartet_summe": _euro(sum(v.betrag_ist_cent or 0 for v in offen)),
+    }
+
+
+def _rest_weiterfuehren(session: Session, firma: Firma, v: Vorgang,
+                        current: User, rest: int) -> Optional[Vorgang]:
+    """Legt den Fehlbetrag als Forderung der FOLGEWOCHE an.
+
+    Wichtig ist die Kalenderwoche: ohne sie tauchte der Rest in keiner
+    Wochenübersicht auf, und beim Anlegen der nächsten Woche galt der Fahrer
+    als noch nicht dran - es entstand eine zweite Forderung daneben, die
+    niemand mit dieser hier zusammenrechnete. Mit gesetzter Woche wächst der
+    Rest stattdessen zur Wochenforderung heran.
+    """
+    if rest == 0:
+        return None
+    guthaben = rest < 0
+    if guthaben:
+        woher = f" (Guthaben aus {v.periode})" if v.periode else " (Guthaben)"
+    else:
+        woher = f" (Rest aus {v.periode})" if v.periode else " (Restbetrag)"
+    folge_montag = (_kw_montag(v.periode) + timedelta(days=7)) if v.periode else (
+        date.today() - timedelta(days=date.today().weekday()) + timedelta(days=7))
+    neu = Vorgang(firma_id=firma.id, art=v.art,
+                  titel=(v.mitarbeiter_name or v.titel) + woher,
+                  mitarbeiter_id=v.mitarbeiter_id,
+                  mitarbeiter_name=v.mitarbeiter_name,
+                  betrag_soll_cent=rest, nachfolger_von=v.id,
+                  periode=_kw_text(folge_montag),
+                  faellig_am=folge_montag + timedelta(days=6),
+                  erstellt_von=current.id or 0, erstellt_von_name=_wer(current))
+    session.add(neu)
+    try:
+        session.commit(); session.refresh(neu)
+    except Exception:
+        session.rollback()
+        return None
+    if guthaben:
+        _ereignis(session, neu, current, "angelegt",
+                  f"Guthaben aus „{v.titel}“ – die Auslagen lagen "
+                  f"{_euro(abs(rest))} € über der Forderung.", rest)
+        _ereignis(session, v, current, "kommentar",
+                  f"Guthaben von {_euro(abs(rest))} € in die Woche {neu.periode} "
+                  f"mitgenommen.")
+    else:
+        _ereignis(session, neu, current, "angelegt",
+                  f"Rest aus „{v.titel}“ – dort waren {_euro(rest)} € offen geblieben.", rest)
+        _ereignis(session, v, current, "kommentar",
+                  f"Rest von {_euro(rest)} € in die Woche {neu.periode} weitergeführt.")
+    session.commit()
+    return neu
+
+
+class VorgangBestaetigenRequest(BaseModel):
+    hinweis: Optional[str] = None
+    rest_uebernehmen: bool = False
+    betrag: Optional[str] = None        # Korrektur, falls die Meldung nicht stimmt
+    abzug: Optional[str] = None         # Korrektur der Auslagen
+    abzug_grund: Optional[str] = None
+
+
+@app.post("/vorgaenge/{vorgang_id}/bestaetigen")
+def vorgang_bestaetigen(vorgang_id: int, data: VorgangBestaetigenRequest,
+                        current: User = Depends(get_wirk_user),
+                        session: Session = Depends(get_session)):
+    """Zweites Augenpaar: das gemeldete Geld ist angekommen.
+
+    Wer gemeldet hat, darf nicht selbst bestätigen - sonst wäre das Prinzip
+    nur Zierde. Der Inhaber ist davon nicht ausgenommen.
+    """
+    firma = _vorgang_firma(current, session)
+    v = session.get(Vorgang, vorgang_id)
+    if v is None or v.firma_id != firma.id:
+        raise HTTPException(status_code=404, detail="Vorgang nicht gefunden")
+    if v.status != "gemeldet":
+        raise HTTPException(
+            status_code=409,
+            detail="Dieser Vorgang wartet nicht auf eine Bestätigung.")
+    if v.gemeldet_von and v.gemeldet_von == (current.id or 0):
+        raise HTTPException(
+            status_code=403,
+            detail="Wer das Geld gemeldet hat, kann es nicht selbst bestätigen. "
+                   "Das muss eine zweite Person tun.")
+
+    if data.betrag not in (None, ""):
+        neu_cent = _cent(data.betrag)
+        if neu_cent != v.betrag_ist_cent:
+            _ereignis(session, v, current, "geaendert",
+                      f"Beim Bestätigen berichtigt: {_euro(v.betrag_ist_cent)} € → "
+                      f"{_euro(neu_cent)} €.")
+            v.betrag_ist_cent = neu_cent
+
+    if data.abzug not in (None, ""):
+        neu_abzug = _cent(data.abzug)
+        if neu_abzug != v.abzug_cent:
+            _ereignis(session, v, current, "geaendert",
+                      f"Abzug beim Bestätigen berichtigt: {_euro(v.abzug_cent)} € → "
+                      f"{_euro(neu_abzug)} €.")
+            v.abzug_cent = neu_abzug
+            if data.abzug_grund:
+                v.abzug_grund = data.abzug_grund.strip()[:200]
+
+    rest = _rest_cent(v)
+    v.ergebnis = "teilweise" if rest > 0 else "komplett"
+    v.status = "erledigt"
+    v.erledigt_von = current.id or 0
+    v.erledigt_von_name = _wer(current)
+    v.erledigt_am = datetime.utcnow()
+    session.add(v)
+    _ereignis(session, v, current, "erledigt",
+              (data.hinweis or "").strip() or "Geldeingang bestätigt.",
+              v.betrag_ist_cent)
+    session.commit(); session.refresh(v)
+
+    daten = _vorgang_dict(v)
+    daten["rest_cent"] = rest if rest > 0 else 0
+    daten["rest"] = _euro(rest) if rest > 0 else ""
+    if rest < 0 or (data.rest_uebernehmen and rest > 0):
+        folge = _rest_weiterfuehren(session, firma, v, current, rest)
+        if folge is not None:
+            daten["rest_vorgang"] = _vorgang_dict(folge)
+    return daten
 
 
 @app.post("/vorgaenge/{vorgang_id}/erledigt")
@@ -4253,44 +4672,76 @@ def vorgang_erledigt(vorgang_id: int, data: VorgangErledigtRequest,
         raise HTTPException(status_code=400,
                             detail="Bitte kurz beschreiben, was gefehlt hat.")
 
+    if data.abzug not in (None, ""):
+        v.abzug_cent = _cent(data.abzug)
+        v.abzug_grund = (data.abzug_grund or "").strip()[:200]
+        if v.abzug_cent and not v.abzug_grund:
+            raise HTTPException(
+                status_code=400,
+                detail="Bitte kurz angeben, wofür der Abzug ist – "
+                       "sonst weiß später niemand, warum weniger Geld kam.")
+
     if data.betrag not in (None, ""):
         v.betrag_ist_cent = _cent(data.betrag)
     elif ergebnis == "komplett":
-        v.betrag_ist_cent = v.betrag_soll_cent
+        # Was der Fahrer ausgelegt hat, muss er nicht auch noch bar bringen.
+        v.betrag_ist_cent = max(0, (v.betrag_soll_cent or 0) - (v.abzug_cent or 0))
 
-    v.status = "erledigt"
+    # Kasseninventur: der gezählte Bestand gegen das, was laut bestätigten
+    # Vorgängen heute hereingekommen sein müsste. Die Differenz ist der Punkt
+    # der ganzen Übung - sie wird gerechnet, nicht geschätzt.
+    if v.art == "kasseninventur" and data.kasse_gezaehlt not in (None, ""):
+        v.kasse_gezaehlt_cent = _cent(data.kasse_gezaehlt)
+        v.kasse_soll_cent = _kasse_soll(session, firma, v.faellig_am or date.today())
+        unterschied = v.kasse_gezaehlt_cent - v.kasse_soll_cent
+        _ereignis(session, v, current, "kommentar",
+                  "Kasse gezählt: " + _euro(v.kasse_gezaehlt_cent) + " € · "
+                  + "erwartet: " + _euro(v.kasse_soll_cent) + " € · "
+                  + ("stimmt überein." if unterschied == 0
+                     else ("Überschuss " if unterschied > 0 else "Fehlbetrag ")
+                          + _euro(abs(unterschied)) + " €"),
+                  v.kasse_gezaehlt_cent)
+
+    # Deckt Bargeld plus Beleg die Forderung, ist der Vorgang komplett -
+    # auch wenn weniger Bargeld kam, als gefordert war.
+    if ergebnis == "teilweise" and _rest_cent(v) <= 0:
+        ergebnis = "komplett"
     v.ergebnis = ergebnis
-    v.erledigt_von = current.id or 0
-    v.erledigt_von_name = _wer(current)
-    v.erledigt_am = datetime.utcnow()
-    session.add(v)
-    _ereignis(session, v, current, "erledigt", hinweis, v.betrag_ist_cent)
+    v.gemeldet_von = current.id or 0
+    v.gemeldet_von_name = _wer(current)
+    v.gemeldet_am = datetime.utcnow()
+
+    # Vier-Augen-Prinzip: Wer kassiert, meldet nur. Erledigt ist der Vorgang
+    # erst, wenn eine zweite Person das Geld gesehen hat. Ist der Schalter aus
+    # oder gibt es niemanden zum Gegenzeichnen, bleibt es beim direkten Weg.
+    if firma.vier_augen and v.art == "fahrer_kassieren":
+        v.status = "gemeldet"
+        session.add(v)
+        _ereignis(session, v, current, "gemeldet", hinweis, v.betrag_ist_cent)
+    else:
+        v.status = "erledigt"
+        v.erledigt_von = current.id or 0
+        v.erledigt_von_name = _wer(current)
+        v.erledigt_am = datetime.utcnow()
+        session.add(v)
+        _ereignis(session, v, current, "erledigt", hinweis, v.betrag_ist_cent)
     session.commit(); session.refresh(v)
 
     ergebnis_daten = _vorgang_dict(v)
 
     # Fehlt Geld, kann der Rest gleich als neuer Vorgang weiterlaufen - sonst
     # muss sich naechste Woche jemand daran erinnern, dass noch etwas offen war.
-    rest = (v.betrag_soll_cent or 0) - (v.betrag_ist_cent or 0)
+    rest = _rest_cent(v)
     ergebnis_daten["rest_cent"] = rest if rest > 0 else 0
     ergebnis_daten["rest"] = _euro(rest) if rest > 0 else ""
-    if data.rest_uebernehmen and rest > 0:
-        woher = f" (Rest aus {v.periode})" if v.periode else " (Restbetrag)"
-        neu = Vorgang(firma_id=firma.id, art=v.art,
-                      titel=(v.mitarbeiter_name or v.titel) + woher,
-                      mitarbeiter_id=v.mitarbeiter_id,
-                      mitarbeiter_name=v.mitarbeiter_name,
-                      betrag_soll_cent=rest, nachfolger_von=v.id,
-                      faellig_am=date.today() + timedelta(days=7),
-                      erstellt_von=current.id or 0, erstellt_von_name=_wer(current))
-        session.add(neu); session.commit(); session.refresh(neu)
-        _ereignis(session, neu, current, "angelegt",
-                  f"Rest aus „{v.titel}“ – dort waren {_euro(rest)} € offen geblieben.",
-                  rest)
-        _ereignis(session, v, current, "kommentar",
-                  f"Rest von {_euro(rest)} € als neuer Vorgang weitergeführt.")
-        session.commit()
-        ergebnis_daten["rest_vorgang"] = _vorgang_dict(neu)
+    # Ein Guthaben wird IMMER mitgenommen - es dem Fahrer verfallen zu lassen,
+    # weil jemand ein Häkchen vergisst, wäre nicht in Ordnung.
+    if v.status == "erledigt" and (rest < 0 or (data.rest_uebernehmen and rest > 0)):
+        folge = _rest_weiterfuehren(session, firma, v, current, rest)
+        if folge is not None:
+            ergebnis_daten["rest_vorgang"] = _vorgang_dict(folge)
+    elif rest > 0 and v.status == "gemeldet":
+        ergebnis_daten["rest_offen"] = True   # entscheidet die Bestätigung
     return ergebnis_daten
 
 
@@ -4334,6 +4785,9 @@ def vorgang_wieder_oeffnen(vorgang_id: int, data: VorgangTextRequest,
     v.erledigt_von = 0
     v.erledigt_von_name = ""
     v.erledigt_am = None
+    v.gemeldet_von = 0
+    v.gemeldet_von_name = ""
+    v.gemeldet_am = None
     session.add(v)
     _ereignis(session, v, current, "geoeffnet", grund)
     session.commit(); session.refresh(v)
