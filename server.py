@@ -3454,6 +3454,8 @@ def _vorgang_dict(v: Vorgang, ereignisse: Optional[list] = None) -> dict:
         "differenz_cent": (v.betrag_ist_cent or 0) - (v.betrag_soll_cent or 0),
         "status": v.status,
         "ergebnis": v.ergebnis or "",
+        "periode": v.periode or "",
+        "nachfolger_von": v.nachfolger_von or 0,
         "faellig_am": v.faellig_am.isoformat() if v.faellig_am else None,
         "ueberfaellig": bool(v.status == "offen" and v.faellig_am
                              and v.faellig_am < date.today()),
@@ -3518,61 +3520,141 @@ def _woche_index(monat: str, montag: date) -> int:
     return max(0, (montag - erster).days // 7)
 
 
+def _lohn_daten(session: Session, firma_id: int, monat: str) -> list:
+    """Die Fahrerzeilen eines Lohn-Monats - robust gegen kaputte Altstände.
+
+    Die Lohndaten sind ein freies JSON aus dem Dashboard. Ein unerwarteter
+    Aufbau darf den Vorgangs-Dialog nicht lahmlegen, deshalb wird hier alles
+    weggefiltert, was nicht die erwartete Form hat.
+    """
+    blob = _get_blob(session, firma_id, "lohn_monat", _safe_periode(monat))
+    if blob is None:
+        return []
+    try:
+        daten = json.loads(blob.data)
+    except Exception:
+        return []
+    roh = daten.get("drivers") if isinstance(daten, dict) else None
+    return [f for f in roh if isinstance(f, dict)] if isinstance(roh, list) else []
+
+
+def _lohn_wochen_von(fahrer: dict) -> list:
+    w = fahrer.get("wochen")
+    return [z for z in w if isinstance(z, dict)] if isinstance(w, list) else []
+
+
+def _lohn_treffer(fahrer_liste: list, index: int) -> int:
+    """Wie viele Fahrer haben in dieser Woche überhaupt einen Betrag unter
+    „Offen"? Daran erkennt man, ob eine Woche die gesuchte ist."""
+    n = 0
+    for f in fahrer_liste:
+        wochen = _lohn_wochen_von(f)
+        if index < len(wochen) and wochen[index].get("offen") not in (None, "", 0):
+            n += 1
+    return n
+
+
+def _lohn_woche_suchen(session: Session, firma_id: int, montag: date) -> dict:
+    """Sucht selbstständig die Lohn-Woche, die zu dieser Kalenderwoche gehört.
+
+    Durchsucht alle gespeicherten Monate. Eine Woche kann über den
+    Monatswechsel laufen (Montag im August, Sonntag im September) - dann zählt
+    sie als erste Woche des neuen Monats. Bevorzugt wird die Woche, in der
+    tatsächlich Beträge stehen; gibt es die nicht, die rechnerisch passende.
+
+    Wochen, die zeitlich NICHT zu dieser Kalenderwoche gehören, werden nie
+    von allein genommen - sie kommen nur als Vorschlag zum Umschalten zurück.
+    Sonst würde man versehentlich einen Betrag aus einer anderen Woche
+    einfordern, und beim Bargeld ist das der teuerste aller Fehler.
+    """
+    sonntag = montag + timedelta(days=6)
+    passend, alternativen = [], []
+
+    for monat in sorted(_list_keys(session, firma_id, "lohn_monat"), reverse=True):
+        fahrer_liste = _lohn_daten(session, firma_id, monat)
+        if not fahrer_liste:
+            continue
+        anzahl = max([len(_lohn_wochen_von(f)) for f in fahrer_liste] or [0])
+        if not anzahl:
+            continue
+        try:
+            erster = date(int(monat[:4]), int(monat[5:7]), 1)
+        except ValueError:
+            continue
+
+        if erster <= montag:
+            index = (montag - erster).days // 7
+            trifft_zu = index < anzahl
+        else:
+            # Der Montag liegt vor dem Monatsersten: nur wenn die Woche in
+            # diesen Monat hineinreicht, ist es dessen erste Woche.
+            index, trifft_zu = 0, (erster <= sonntag)
+
+        eintrag = {"monat": monat, "woche_nr": index + 1,
+                   "treffer": _lohn_treffer(fahrer_liste, index), "anzahl": anzahl}
+        (passend if trifft_zu else alternativen).append(eintrag)
+
+        # Auch die übrigen Wochen dieses Monats als Ausweichvorschlag merken -
+        # falls die rechnerisch passende Woche leer geblieben ist.
+        for i in range(anzahl):
+            if i == index:
+                continue
+            t = _lohn_treffer(fahrer_liste, i)
+            if t:
+                alternativen.append({"monat": monat, "woche_nr": i + 1,
+                                     "treffer": t, "anzahl": anzahl})
+
+    # Innerhalb der zeitlich passenden Wochen die mit Beträgen bevorzugen.
+    passend.sort(key=lambda e: (-e["treffer"], e["monat"]))
+    treffer_alternativen = sorted([a for a in alternativen if a["treffer"]],
+                                  key=lambda e: (e["monat"], e["woche_nr"]), reverse=True)
+
+    if passend:
+        gewaehlt = passend[0]
+        rest = passend[1:] + treffer_alternativen
+    else:
+        gewaehlt = {"monat": montag.strftime("%Y-%m"),
+                    "woche_nr": max(1, _woche_index(montag.strftime("%Y-%m"), montag) + 1),
+                    "treffer": 0, "anzahl": 0}
+        rest = treffer_alternativen
+    return {"gewaehlt": gewaehlt, "alternativen": [a for a in rest if a["treffer"]][:6]}
+
+
 def _lohn_monat_waehlen(session: Session, firma_id: int, montag: date,
                         gewuenscht: str = "") -> str:
-    """Welcher Lohn-Monat gehört zu dieser Kalenderwoche?
-
-    Eine Woche kann über den Monatswechsel laufen (Montag im August, Sonntag
-    im September). Darum werden beide Monate geprüft und der genommen, für den
-    es überhaupt gespeicherte Lohndaten gibt. Findet sich keiner, wird der
-    zuletzt gespeicherte Monat vorgeschlagen - sonst stünde der Anwender vor
-    einem leeren Dialog, ohne zu wissen warum.
-    """
     if gewuenscht and re.match(r"^\d{4}-\d{2}$", gewuenscht):
         return gewuenscht
-    sonntag = montag + timedelta(days=6)
-    kandidaten = [montag.strftime("%Y-%m")]
-    if sonntag.strftime("%Y-%m") != kandidaten[0]:
-        kandidaten.append(sonntag.strftime("%Y-%m"))
-    for monat in kandidaten:
-        if _get_blob(session, firma_id, "lohn_monat", _safe_periode(monat)) is not None:
-            return monat
-    vorhanden = _list_keys(session, firma_id, "lohn_monat")
-    if vorhanden:
-        return sorted(vorhanden)[-1]
-    return kandidaten[0]
+    return _lohn_woche_suchen(session, firma_id, montag)["gewaehlt"]["monat"]
 
 
 def _lohn_wochenwerte(session: Session, firma_id: int, montag: date,
                       monat: str = "", woche_nr: int = 0) -> dict:
     """Liefert {Fahrername (klein): offen_in_cent} aus dem Lohn-Monat.
 
-    monat und woche_nr sind optional. Ohne sie wird geraten (siehe
-    _lohn_monat_waehlen und _woche_index) - in der Oberfläche kann der
-    Anwender beides umstellen, damit die Vermutung nie zur Sackgasse wird.
+    monat und woche_nr sind optional. Ohne beides sucht die App selbst
+    (_lohn_woche_suchen); die Oberfläche kann trotzdem umstellen, damit die
+    Automatik nie zur Sackgasse wird.
     """
-    monat = _lohn_monat_waehlen(session, firma_id, montag, monat)
-    leer = {"monat": monat, "woche_nr": max(1, woche_nr or _woche_index(monat, montag) + 1),
-            "gefunden": False, "werte": {}, "wochen_anzahl": 0, "namen": []}
-    blob = _get_blob(session, firma_id, "lohn_monat", _safe_periode(monat))
-    if blob is None:
-        return leer
-    try:
-        daten = json.loads(blob.data)
-    except Exception:
+    suche = _lohn_woche_suchen(session, firma_id, montag)
+    alternativen = suche["alternativen"]
+    if monat and re.match(r"^\d{4}-\d{2}$", monat):
+        if not woche_nr:
+            woche_nr = (suche["gewaehlt"]["woche_nr"]
+                        if suche["gewaehlt"]["monat"] == monat
+                        else _woche_index(monat, montag) + 1)
+    else:
+        monat = suche["gewaehlt"]["monat"]
+        woche_nr = woche_nr or suche["gewaehlt"]["woche_nr"]
+
+    leer = {"monat": monat, "woche_nr": max(1, woche_nr), "gefunden": False,
+            "werte": {}, "wochen_anzahl": 0, "namen": [], "alternativen": alternativen,
+            "automatisch": suche["gewaehlt"]["treffer"] > 0}
+    fahrer_liste = _lohn_daten(session, firma_id, monat)
+    if not fahrer_liste:
         return leer
 
-    # Vorsicht: die Lohndaten sind ein freies JSON aus dem Dashboard. Ein
-    # kaputter oder alter Stand darf den Vorgangs-Dialog nicht lahmlegen.
-    def _wochen_von(fahrer) -> list:
-        w = fahrer.get("wochen")
-        return [z for z in w if isinstance(z, dict)] if isinstance(w, list) else []
-
-    roh = daten.get("drivers") if isinstance(daten, dict) else None
-    fahrer_liste = [f for f in roh if isinstance(f, dict)] if isinstance(roh, list) else []
-    anzahl = max([len(_wochen_von(f)) for f in fahrer_liste] or [0])
-    index = (woche_nr - 1) if woche_nr else _woche_index(monat, montag)
-    index = min(max(index, 0), max(anzahl - 1, 0))
+    anzahl = max([len(_lohn_wochen_von(f)) for f in fahrer_liste] or [0])
+    index = min(max(woche_nr - 1, 0), max(anzahl - 1, 0))
 
     werte, namen = {}, []
     for fahrer in fahrer_liste:
@@ -3580,7 +3662,7 @@ def _lohn_wochenwerte(session: Session, firma_id: int, montag: date,
         if not name:
             continue
         namen.append(name)
-        wochen = _wochen_von(fahrer)
+        wochen = _lohn_wochen_von(fahrer)
         if index >= len(wochen):
             continue
         offen = wochen[index].get("offen")
@@ -3590,8 +3672,15 @@ def _lohn_wochenwerte(session: Session, firma_id: int, montag: date,
             werte[name.lower()] = _cent(offen)
         except HTTPException:
             continue
+
+    # Andere Wochen mit Beträgen zum Umschalten anbieten - aber nur solche,
+    # die nicht die gerade gezeigte sind.
+    vorschlaege = [a for a in alternativen
+                   if not (a["monat"] == monat and a["woche_nr"] == index + 1)]
     return {"monat": monat, "woche_nr": index + 1, "gefunden": True,
-            "werte": werte, "wochen_anzahl": anzahl, "namen": namen}
+            "werte": werte, "wochen_anzahl": anzahl, "namen": namen,
+            "alternativen": vorschlaege,
+            "automatisch": suche["gewaehlt"]["treffer"] > 0}
 
 
 @app.get("/vorgaenge/wochenvorschlag")
@@ -3632,6 +3721,8 @@ def wochenvorschlag(kw: str = "", lohn_monat: str = "", lohn_woche: int = 0,
         "lohn_wochen_anzahl": lohn["wochen_anzahl"],
         "lohn_monate": sorted(_list_keys(session, firma.id, "lohn_monat"), reverse=True),
         "lohn_ohne_mitarbeiter": ohne_mitarbeiter,
+        "lohn_automatisch": lohn["automatisch"],
+        "lohn_alternativen": lohn["alternativen"],
         "fahrer": [{
             "mitarbeiter_id": m.id,
             "name": m.name,
@@ -3772,6 +3863,160 @@ def _kasseninventur_sicherstellen(session: Session, firma: Firma):
     session.commit()
 
 
+# ─────────────── FAHRERKONTO ───────────────
+#
+# Der Kontostand ist bewusst schlicht definiert: offen ist die Summe der
+# Soll-Beträge aller OFFENEN Vorgänge. Ein erledigter Vorgang zählt nie mehr
+# mit - entweder wurde alles kassiert, oder der Fehlbetrag lief als neuer
+# Vorgang weiter (dann steckt er dort), oder er wurde bewusst abgeschrieben.
+# Diese Regel vermeidet die Doppelzählung, die entsteht, wenn man Soll und
+# Rest-Folgevorgang beide addiert.
+
+
+def _konto_zahlen(vorgaenge: list) -> dict:
+    """Kennzahlen eines Fahrerkontos aus seinen Abkassier-Vorgängen."""
+    aktiv = [v for v in vorgaenge if v.status != "storniert"]
+    hat_nachfolger = {v.nachfolger_von for v in aktiv if v.nachfolger_von}
+    offen = [v for v in aktiv if v.status == "offen"]
+    erledigt = [v for v in aktiv if v.status == "erledigt"]
+
+    abgeschrieben = 0
+    for v in erledigt:
+        rest = (v.betrag_soll_cent or 0) - (v.betrag_ist_cent or 0)
+        if rest > 0 and v.id not in hat_nachfolger:
+            abgeschrieben += rest
+
+    return {
+        "offen_cent": sum(v.betrag_soll_cent or 0 for v in offen),
+        "gestellt_cent": sum(v.betrag_soll_cent or 0 for v in aktiv),
+        "erhalten_cent": sum(v.betrag_ist_cent or 0 for v in erledigt),
+        "abgeschrieben_cent": abgeschrieben,
+        "anzahl_offen": len(offen),
+        "anzahl_gesamt": len(aktiv),
+        "letzte_zahlung": max([v.erledigt_am for v in erledigt if v.erledigt_am],
+                              default=None),
+    }
+
+
+def _konto_vorgaenge(session: Session, firma_id: int, mitarbeiter_id: int = 0) -> list:
+    bedingungen = [Vorgang.firma_id == firma_id, Vorgang.art == "fahrer_kassieren"]
+    if mitarbeiter_id:
+        bedingungen.append(Vorgang.mitarbeiter_id == mitarbeiter_id)
+    return list(session.exec(select(Vorgang).where(*bedingungen)).all())
+
+
+@app.get("/vorgaenge/konten")
+def vorgaenge_konten(current: User = Depends(get_wirk_user),
+                     session: Session = Depends(get_session)):
+    """Alle Fahrer mit ihrem aktuellen Kontostand - die Übersichtsliste."""
+    firma = _vorgang_firma(current, session, schreibend=False)
+    alle = _konto_vorgaenge(session, firma.id)
+    nach_fahrer = {}
+    for v in alle:
+        nach_fahrer.setdefault(v.mitarbeiter_id, []).append(v)
+
+    leute = {m.id: m for m in session.exec(
+        select(Mitarbeiter).where(Mitarbeiter.firma_id == firma.id)).all()}
+
+    zeilen = []
+    for ma_id, gruppe in nach_fahrer.items():
+        z = _konto_zahlen(gruppe)
+        person = leute.get(ma_id)
+        zeilen.append({
+            "mitarbeiter_id": ma_id,
+            "name": person.name if person else (gruppe[0].mitarbeiter_name or "Unbekannt"),
+            "aktiv": bool(person.aktiv) if person else False,
+            "offen": _euro(z["offen_cent"]), "offen_cent": z["offen_cent"],
+            "gestellt": _euro(z["gestellt_cent"]),
+            "erhalten": _euro(z["erhalten_cent"]),
+            "abgeschrieben": _euro(z["abgeschrieben_cent"]),
+            "abgeschrieben_cent": z["abgeschrieben_cent"],
+            "anzahl_offen": z["anzahl_offen"],
+            "letzte_zahlung": z["letzte_zahlung"].isoformat() if z["letzte_zahlung"] else "",
+        })
+
+    # Fahrer ohne jeden Vorgang gehören mit in die Liste - ein Konto bei null
+    # ist eine Information, kein fehlender Eintrag.
+    for m in leute.values():
+        if m.aktiv and m.id not in nach_fahrer:
+            zeilen.append({"mitarbeiter_id": m.id, "name": m.name, "aktiv": True,
+                           "offen": "0,00", "offen_cent": 0, "gestellt": "0,00",
+                           "erhalten": "0,00", "abgeschrieben": "0,00",
+                           "abgeschrieben_cent": 0, "anzahl_offen": 0,
+                           "letzte_zahlung": ""})
+
+    zeilen.sort(key=lambda z: (-z["offen_cent"], z["name"].lower()))
+    return {
+        "zeilen": zeilen,
+        "summe_offen": _euro(sum(z["offen_cent"] for z in zeilen)),
+        "summe_abgeschrieben": _euro(sum(z["abgeschrieben_cent"] for z in zeilen)),
+        "anzahl_mit_offen": len([z for z in zeilen if z["offen_cent"]]),
+        "darf_bearbeiten": hat_recht(current, "vorgaenge"),
+    }
+
+
+@app.get("/vorgaenge/fahrer/{mitarbeiter_id}")
+def vorgaenge_fahrerkonto(mitarbeiter_id: int,
+                          current: User = Depends(get_wirk_user),
+                          session: Session = Depends(get_session)):
+    """Die Historie eines Fahrers: jede Forderung, jede Zahlung, laufender Stand."""
+    firma = _vorgang_firma(current, session, schreibend=False)
+    person = session.get(Mitarbeiter, mitarbeiter_id)
+    if person is None or person.firma_id != firma.id:
+        raise HTTPException(status_code=404, detail="Fahrer nicht gefunden")
+
+    alle = _konto_vorgaenge(session, firma.id, mitarbeiter_id)
+    alle.sort(key=lambda v: (v.erstellt_am or datetime.min, v.id or 0))
+    hat_nachfolger = {v.nachfolger_von for v in alle
+                      if v.nachfolger_von and v.status != "storniert"}
+
+    stand = 0
+    verlauf = []
+    for v in alle:
+        rest = (v.betrag_soll_cent or 0) - (v.betrag_ist_cent or 0)
+        if v.status == "offen":
+            stand += v.betrag_soll_cent or 0
+        # Erledigte verändern den Stand nicht: entweder ist alles bezahlt, der
+        # Rest läuft als eigener Vorgang weiter, oder er wurde abgeschrieben.
+        verlauf.append({
+            "id": v.id,
+            "titel": v.titel,
+            "periode": v.periode,
+            "status": v.status,
+            "ergebnis": v.ergebnis,
+            "soll": _euro(v.betrag_soll_cent), "soll_cent": v.betrag_soll_cent or 0,
+            "ist": _euro(v.betrag_ist_cent) if v.status == "erledigt" else "",
+            "ist_cent": v.betrag_ist_cent or 0,
+            "fehlbetrag": _euro(rest) if (v.status == "erledigt" and rest > 0) else "",
+            "weitergefuehrt": v.id in hat_nachfolger,
+            "aus_vorgang": v.nachfolger_von or 0,
+            "stand": _euro(stand),
+            "erstellt_am": v.erstellt_am.isoformat() if v.erstellt_am else "",
+            "erledigt_am": v.erledigt_am.isoformat() if v.erledigt_am else "",
+            "erstellt_von_name": v.erstellt_von_name,
+            "erledigt_von_name": v.erledigt_von_name,
+            "faellig_am": v.faellig_am.isoformat() if v.faellig_am else "",
+            "ueberfaellig": bool(v.status == "offen" and v.faellig_am
+                                 and v.faellig_am < date.today()),
+        })
+
+    z = _konto_zahlen(alle)
+    return {
+        "mitarbeiter_id": person.id,
+        "name": person.name,
+        "aktiv": bool(person.aktiv),
+        "offen": _euro(z["offen_cent"]), "offen_cent": z["offen_cent"],
+        "gestellt": _euro(z["gestellt_cent"]),
+        "erhalten": _euro(z["erhalten_cent"]),
+        "abgeschrieben": _euro(z["abgeschrieben_cent"]),
+        "anzahl_offen": z["anzahl_offen"],
+        "anzahl_gesamt": z["anzahl_gesamt"],
+        "letzte_zahlung": z["letzte_zahlung"].isoformat() if z["letzte_zahlung"] else "",
+        "verlauf": list(reversed(verlauf)),      # neueste zuerst
+        "darf_bearbeiten": hat_recht(current, "vorgaenge"),
+    }
+
+
 @app.get("/vorgaenge")
 def vorgaenge_liste(q: str = "", art: str = "", mitarbeiter_id: Optional[int] = None,
                     von: str = "", bis: str = "", limit: int = 25,
@@ -3787,7 +4032,9 @@ def vorgaenge_liste(q: str = "", art: str = "", mitarbeiter_id: Optional[int] = 
 
     alle = session.exec(select(Vorgang).where(Vorgang.firma_id == firma.id)).all()
     offen = [v for v in alle if v.status == "offen"]
-    erledigt = [v for v in alle if v.status != "offen"]
+    # Stornierte gehören nicht in die Arbeitsliste. Auffindbar bleiben sie
+    # über das Fahrerkonto und ihren Verlauf.
+    erledigt = [v for v in alle if v.status == "erledigt"]
     offen.sort(key=lambda v: (v.faellig_am or date.max, -(v.id or 0)))
     erledigt.sort(key=lambda v: (v.erledigt_am or datetime.min), reverse=True)
 
@@ -4003,6 +4250,123 @@ def vorgang_wieder_oeffnen(vorgang_id: int, data: VorgangTextRequest,
     v.erledigt_am = None
     session.add(v)
     _ereignis(session, v, current, "geoeffnet", grund)
+    session.commit(); session.refresh(v)
+    return _vorgang_dict(v)
+
+
+class VorgangAendernRequest(BaseModel):
+    titel: Optional[str] = None
+    betrag: Optional[str] = None         # Soll-Betrag
+    betrag_ist: Optional[str] = None     # nur bei erledigten: was wirklich kam
+    faellig_am: Optional[str] = None
+    grund: Optional[str] = None
+
+
+@app.patch("/vorgaenge/{vorgang_id}")
+def vorgang_aendern(vorgang_id: int, data: VorgangAendernRequest,
+                    current: User = Depends(get_wirk_user),
+                    session: Session = Depends(get_session)):
+    """Einen Vorgang berichtigen.
+
+    Bei offenen Vorgängen lassen sich Titel, Soll-Betrag und Fälligkeit ändern,
+    bei erledigten zusätzlich der tatsächlich erhaltene Betrag - ein Zahlendreher
+    beim Abhaken soll nicht dazu zwingen, den Vorgang neu anzulegen.
+
+    Nichts wird still überschrieben: jede Änderung landet mit altem und neuem
+    Wert im Verlauf. Bei Geldbeträgen ist ein Grund Pflicht.
+    """
+    firma = _vorgang_firma(current, session)
+    v = session.get(Vorgang, vorgang_id)
+    if v is None or v.firma_id != firma.id:
+        raise HTTPException(status_code=404, detail="Vorgang nicht gefunden")
+    if v.status == "storniert":
+        raise HTTPException(status_code=409,
+                            detail="Dieser Vorgang ist storniert und kann nicht geändert werden.")
+
+    aenderungen = []
+
+    if data.titel is not None:
+        neu = data.titel.strip()[:160]
+        if not neu:
+            raise HTTPException(status_code=400, detail="Der Titel darf nicht leer sein.")
+        if neu != v.titel:
+            aenderungen.append(f"Bezeichnung: „{v.titel}“ → „{neu}“")
+            v.titel = neu
+
+    if data.betrag is not None:
+        neu_cent = _cent(data.betrag)
+        if neu_cent != v.betrag_soll_cent:
+            aenderungen.append(f"Betrag: {_euro(v.betrag_soll_cent)} € → {_euro(neu_cent)} €")
+            v.betrag_soll_cent = neu_cent
+
+    if data.betrag_ist is not None:
+        if v.status != "erledigt":
+            raise HTTPException(
+                status_code=400,
+                detail="Der erhaltene Betrag lässt sich erst nach dem Abhaken ändern.")
+        neu_cent = _cent(data.betrag_ist)
+        if neu_cent != v.betrag_ist_cent:
+            aenderungen.append(f"Erhalten: {_euro(v.betrag_ist_cent)} € → {_euro(neu_cent)} €")
+            v.betrag_ist_cent = neu_cent
+            rest = (v.betrag_soll_cent or 0) - neu_cent
+            v.ergebnis = "teilweise" if rest > 0 else "komplett"
+
+    if data.faellig_am is not None:
+        neu_datum = _datum_oder_none(data.faellig_am)
+        if neu_datum != v.faellig_am:
+            alt = v.faellig_am.strftime("%d.%m.%Y") if v.faellig_am else "ohne"
+            jetzt = neu_datum.strftime("%d.%m.%Y") if neu_datum else "ohne"
+            aenderungen.append(f"Fällig: {alt} → {jetzt}")
+            v.faellig_am = neu_datum
+
+    if not aenderungen:
+        return _vorgang_dict(v)
+
+    grund = (data.grund or "").strip()
+    geld_geaendert = data.betrag is not None or data.betrag_ist is not None
+    if geld_geaendert and not grund:
+        raise HTTPException(status_code=400,
+                            detail="Bei einer Betragsänderung bitte kurz den Grund angeben.")
+
+    session.add(v)
+    _ereignis(session, v, current, "geaendert",
+              " · ".join(aenderungen) + (f" — {grund}" if grund else ""))
+    session.commit(); session.refresh(v)
+    return _vorgang_dict(v)
+
+
+@app.post("/vorgaenge/{vorgang_id}/stornieren")
+def vorgang_stornieren(vorgang_id: int, data: VorgangTextRequest,
+                       current: User = Depends(get_wirk_user),
+                       session: Session = Depends(get_session)):
+    """Versehentlich angelegt? Der Vorgang wird stillgelegt statt gelöscht.
+
+    Er verschwindet aus der Arbeitsliste und aus allen Summen, bleibt aber im
+    Fahrerkonto nachlesbar - in einer Kassenführung darf nichts spurlos
+    verschwinden.
+    """
+    firma = _vorgang_firma(current, session)
+    v = session.get(Vorgang, vorgang_id)
+    if v is None or v.firma_id != firma.id:
+        raise HTTPException(status_code=404, detail="Vorgang nicht gefunden")
+    if v.status == "storniert":
+        raise HTTPException(status_code=409, detail="Dieser Vorgang ist bereits storniert.")
+    grund = (data.text or "").strip()
+    if not grund:
+        raise HTTPException(status_code=400, detail="Bitte einen Grund für die Stornierung angeben.")
+
+    folge = session.exec(select(Vorgang).where(
+        Vorgang.firma_id == firma.id, Vorgang.nachfolger_von == v.id,
+        Vorgang.status != "storniert")).first()
+    if folge is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Aus diesem Vorgang läuft noch ein Restbetrag weiter "
+                   f"(„{folge.titel}“). Storniere zuerst diesen.")
+
+    v.status = "storniert"
+    session.add(v)
+    _ereignis(session, v, current, "storniert", grund)
     session.commit(); session.refresh(v)
     return _vorgang_dict(v)
 

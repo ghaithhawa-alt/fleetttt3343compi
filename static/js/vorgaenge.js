@@ -48,6 +48,7 @@
       + '<div class="vg-reiter">'
       +   '<button class="vg-reiter-btn on" data-tab="liste" type="button">Liste</button>'
       +   '<button class="vg-reiter-btn" data-tab="woche" type="button">Wochenübersicht</button>'
+      +   '<button class="vg-reiter-btn" data-tab="konto" type="button">Fahrerkonten</button>'
       + '</div>'
       /* ── Wochenübersicht ── */
       + '<div id="vgWocheAnsicht" style="display:none">'
@@ -63,6 +64,33 @@
       +       '<th class="r">Differenz</th><th>Status</th><th></th>'
       +     '</tr></thead><tbody id="vgWocheBody"></tbody>'
       +     '<tfoot id="vgWocheFuss"></tfoot></table>'
+      +   '</div>'
+      + '</div>'
+      /* ── Fahrerkonten ── */
+      + '<div id="vgKontoAnsicht" style="display:none">'
+      +   '<div id="vgKontoUebersicht">'
+      +     '<div class="vg-kacheln" id="vgKontoKacheln"></div>'
+      +     '<div class="vg-table-wrap">'
+      +       '<table class="vg-table"><thead><tr>'
+      +         '<th>Fahrer</th><th class="r">Offen</th><th class="r">Gestellt</th>'
+      +         '<th class="r">Erhalten</th><th class="r">Abgeschrieben</th>'
+      +         '<th>Letzte Zahlung</th><th></th>'
+      +       '</tr></thead><tbody id="vgKontoBody"></tbody>'
+      +       '<tfoot id="vgKontoFuss"></tfoot></table>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div id="vgKontoDetail" style="display:none">'
+      +     '<div class="vg-kontokopf">'
+      +       '<button class="vg-mini" id="vgKontoZurueck" type="button">◀ Alle Fahrer</button>'
+      +       '<h3 id="vgKontoName"></h3>'
+      +     '</div>'
+      +     '<div class="vg-kacheln" id="vgKontoDetailKacheln"></div>'
+      +     '<div class="vg-table-wrap">'
+      +       '<table class="vg-table"><thead><tr>'
+      +         '<th>Vorgang</th><th class="r">Gefordert</th><th class="r">Erhalten</th>'
+      +         '<th class="r">Fehlt</th><th class="r">Stand danach</th><th>Status</th><th></th>'
+      +       '</tr></thead><tbody id="vgKontoVerlauf"></tbody></table>'
+      +     '</div>'
       +   '</div>'
       + '</div>'
       /* ── Liste ── */
@@ -147,6 +175,7 @@
       +     '<label for="vgStapelWoche">Woche</label>'
       +     '<select id="vgStapelWoche"></select>'
       +   '</div>'
+      +   '<div class="vg-alt" id="vgStapelAlt" style="display:none"></div>'
       +   '<div class="vg-table-wrap">'
       +     '<table class="vg-table"><thead><tr>'
       +       '<th>Fahrer</th><th class="r">Abzukassieren</th><th></th>'
@@ -156,6 +185,30 @@
       +   '<div class="vg-modal-foot">'
       +     '<button class="vg-btn" id="vgStapelAbbruch" type="button">Abbrechen</button>'
       +     '<button class="vg-btn vg-btn-green" id="vgStapelOk" type="button">Vorgänge anlegen</button>'
+      +   '</div>'
+      + '</div>'
+      /* Bearbeiten */
+      + '<div class="vg-modal" id="vgEditModal" style="display:none" role="dialog" aria-modal="true">'
+      +   '<h3>Vorgang bearbeiten</h3>'
+      +   '<p class="vg-modal-sub" id="vgEditSub"></p>'
+      +   '<div class="vg-felder">'
+      +     '<div><label for="vgEditTitel">Bezeichnung</label>'
+      +       '<input id="vgEditTitel" type="text"></div>'
+      +     '<div><label for="vgEditBetrag">Geforderter Betrag</label>'
+      +       '<input id="vgEditBetrag" type="text" inputmode="decimal"></div>'
+      +     '<div id="vgEditIstFeld" style="display:none"><label for="vgEditIst">Tatsächlich erhalten</label>'
+      +       '<input id="vgEditIst" type="text" inputmode="decimal"></div>'
+      +     '<div><label for="vgEditFaellig">Fällig am</label>'
+      +       '<input id="vgEditFaellig" type="date"></div>'
+      +     '<div><label for="vgEditGrund">Grund <span id="vgEditPflicht"></span></label>'
+      +       '<input id="vgEditGrund" type="text" placeholder="z.B. Zählfehler in der Kasse"></div>'
+      +   '</div>'
+      +   '<div class="vg-msg" id="vgEditMsg"></div>'
+      +   '<div class="vg-modal-foot">'
+      +     '<button class="vg-btn vg-btn-rot" id="vgEditStorno" type="button">Stornieren</button>'
+      +     '<span style="flex:1"></span>'
+      +     '<button class="vg-btn" id="vgEditAbbruch" type="button">Abbrechen</button>'
+      +     '<button class="vg-btn vg-btn-green" id="vgEditOk" type="button">Speichern</button>'
       +   '</div>'
       + '</div>'
       /* Verlauf */
@@ -179,6 +232,9 @@
     document.getElementById("vgHakenAbbruch").onclick = dialogeZu;
     document.getElementById("vgDetailZu").onclick = dialogeZu;
     document.getElementById("vgHakenOk").onclick = abhakenSenden;
+    document.getElementById("vgEditAbbruch").onclick = dialogeZu;
+    document.getElementById("vgEditOk").onclick = editSenden;
+    document.getElementById("vgEditStorno").onclick = stornoStarten;
     document.getElementById("vgKommentarOk").onclick = kommentarSenden;
     document.getElementById("vgWiederOeffnen").onclick = wiederOeffnen;
     [].slice.call(document.querySelectorAll(".vg-wahl-btn")).forEach(function (b) {
@@ -197,7 +253,7 @@
   }
 
   function dialogeZu() {
-    ["vgBackdrop", "vgHakenModal", "vgDetailModal", "vgStapelModal"].forEach(function (id) {
+    ["vgBackdrop", "vgHakenModal", "vgDetailModal", "vgStapelModal", "vgEditModal"].forEach(function (id) {
       var e = document.getElementById(id); if (e) e.style.display = "none";
     });
     OFFENES_DETAIL = null;
@@ -212,7 +268,118 @@
     });
     document.getElementById("vgListeAnsicht").style.display = (name === "liste") ? "" : "none";
     document.getElementById("vgWocheAnsicht").style.display = (name === "woche") ? "" : "none";
+    document.getElementById("vgKontoAnsicht").style.display = (name === "konto") ? "" : "none";
     if (name === "woche") wocheLaden(AKTUELLE_KW);
+    if (name === "konto") kontenLaden();
+  }
+
+  /* ── Fahrerkonten ──────────────────────────────────────────────────
+     Der offene Stand ist die Summe der Soll-Beträge aller offenen
+     Vorgänge. Erledigte zählen nie mehr mit: entweder war alles da, der
+     Rest läuft als eigener Vorgang weiter, oder er wurde abgeschrieben. */
+
+  function kachel(titel, wert, art) {
+    return '<div class="vg-kachel' + (art ? " vg-kachel-" + art : "") + '">'
+      + '<div class="vg-kachel-wert">' + esc(wert) + '</div>'
+      + '<div class="vg-kachel-titel">' + esc(titel) + '</div></div>';
+  }
+
+  function kontenLaden() {
+    document.getElementById("vgKontoDetail").style.display = "none";
+    document.getElementById("vgKontoUebersicht").style.display = "";
+    return fetch("/vorgaenge/konten", { headers: kopf() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        document.getElementById("vgKontoKacheln").innerHTML =
+          kachel("Offen insgesamt", d.summe_offen + " €", d.anzahl_mit_offen ? "rot" : "")
+          + kachel("Fahrer mit offenem Betrag", String(d.anzahl_mit_offen))
+          + kachel("Abgeschrieben", d.summe_abgeschrieben + " €");
+
+        document.getElementById("vgKontoBody").innerHTML = d.zeilen.length
+          ? d.zeilen.map(function (z) {
+              return '<tr class="vg-klickbar" data-konto="' + z.mitarbeiter_id + '">'
+                + '<td class="vg-name">' + esc(z.name)
+                +   (z.aktiv ? "" : ' <span class="vg-badge">ausgeschieden</span>') + '</td>'
+                + '<td class="r geld ' + (z.offen_cent ? "minus" : "") + '">' + esc(z.offen) + '</td>'
+                + '<td class="r geld">' + esc(z.gestellt) + '</td>'
+                + '<td class="r geld">' + esc(z.erhalten) + '</td>'
+                + '<td class="r geld">' + (z.abgeschrieben_cent ? esc(z.abgeschrieben) : "–") + '</td>'
+                + '<td>' + (z.letzte_zahlung ? esc(datumKurz(z.letzte_zahlung.slice(0, 10))) : "–") + '</td>'
+                + '<td class="r"><button class="vg-mini" data-konto="' + z.mitarbeiter_id
+                +   '" type="button">Historie</button></td></tr>';
+            }).join("")
+          : '<tr><td colspan="7" class="vg-leer">Noch keine Fahrer angelegt.</td></tr>';
+
+        document.getElementById("vgKontoFuss").innerHTML = d.zeilen.length
+          ? '<tr><td>' + d.zeilen.length + ' Fahrer</td>'
+            + '<td class="r geld">' + esc(d.summe_offen) + '</td>'
+            + '<td colspan="2"></td>'
+            + '<td class="r geld">' + esc(d.summe_abgeschrieben) + '</td>'
+            + '<td colspan="2"></td></tr>'
+          : "";
+
+        document.querySelectorAll("#vgKontoBody [data-konto]").forEach(function (el) {
+          el.onclick = function (e) {
+            e.stopPropagation();
+            kontoOeffnen(Number(el.dataset.konto));
+          };
+        });
+      }).catch(function () {});
+  }
+
+  var KONTO_ID = 0;
+
+  function kontoOeffnen(mitarbeiterId) {
+    KONTO_ID = mitarbeiterId;
+    return fetch("/vorgaenge/fahrer/" + mitarbeiterId, { headers: kopf() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        document.getElementById("vgKontoUebersicht").style.display = "none";
+        document.getElementById("vgKontoDetail").style.display = "";
+        document.getElementById("vgKontoName").textContent = d.name;
+        document.getElementById("vgKontoDetailKacheln").innerHTML =
+          kachel("Offen", d.offen + " €", d.offen_cent ? "rot" : "gruen")
+          + kachel("Gefordert insgesamt", d.gestellt + " €")
+          + kachel("Erhalten insgesamt", d.erhalten + " €")
+          + kachel("Abgeschrieben", d.abgeschrieben + " €");
+
+        document.getElementById("vgKontoVerlauf").innerHTML = d.verlauf.length
+          ? d.verlauf.map(function (z) {
+              var marke = z.status === "storniert"
+                ? '<span class="vg-badge">storniert</span>'
+                : z.status === "offen"
+                  ? '<span class="vg-badge' + (z.ueberfaellig ? " vg-badge-rot" : "") + '">offen</span>'
+                  : '<span class="vg-badge vg-badge-' + (z.ergebnis === "komplett" ? "gruen" : "gelb") + '">'
+                    + (z.ergebnis === "komplett" ? "komplett" : "nicht komplett") + '</span>';
+              if (z.weitergefuehrt) marke += '<span class="vg-badge">Rest weitergeführt</span>';
+              var wann = (z.erledigt_am || z.erstellt_am || "").slice(0, 10);
+              return '<tr' + (z.status === "storniert" ? ' class="vg-zeile-fertig"' : '') + '>'
+                + '<td class="vg-name">' + esc(z.titel)
+                +   '<div class="vg-unten">' + (wann ? esc(datumKurz(wann)) : "")
+                +     (z.erledigt_von_name ? " · " + esc(z.erledigt_von_name) : "") + '</div></td>'
+                + '<td class="r geld">' + esc(z.soll) + '</td>'
+                + '<td class="r geld">' + (z.ist ? esc(z.ist) : "–") + '</td>'
+                + '<td class="r geld ' + (z.fehlbetrag ? "minus" : "") + '">'
+                +   (z.fehlbetrag ? esc(z.fehlbetrag) : "–") + '</td>'
+                + '<td class="r geld">' + esc(z.stand) + '</td>'
+                + '<td>' + marke + '</td>'
+                + '<td class="r">'
+                +   (z.status !== "storniert" && ZUSTAND.darf_bearbeiten
+                    ? '<button class="vg-mini" data-edit="' + z.id + '" type="button">Bearbeiten</button>' : "")
+                +   '<button class="vg-mini" data-detail="' + z.id + '" type="button">Verlauf</button>'
+                + '</td></tr>';
+            }).join("")
+          : '<tr><td colspan="7" class="vg-leer">Für diesen Fahrer gibt es noch keinen Vorgang.</td></tr>';
+
+        document.querySelectorAll("#vgKontoVerlauf [data-detail]").forEach(function (b) {
+          b.onclick = function () { detailOeffnen(Number(b.dataset.detail)); };
+        });
+        document.querySelectorAll("#vgKontoVerlauf [data-edit]").forEach(function (b) {
+          b.onclick = function () { editOeffnen(Number(b.dataset.edit)); };
+        });
+      }).catch(function () {});
   }
 
   /* ── Wochenübersicht ───────────────────────────────────────────── */
@@ -249,6 +416,8 @@
             + '<td class="r">'
             +   (v.status === "offen" && ZUSTAND.darf_bearbeiten
                 ? '<button class="vg-mini vg-mini-green" data-haken="' + v.id + '" type="button">Abhaken</button>' : "")
+            +   (ZUSTAND.darf_bearbeiten
+                ? '<button class="vg-mini" data-edit="' + v.id + '" type="button">Bearbeiten</button>' : "")
             +   '<button class="vg-mini" data-detail="' + v.id + '" type="button">Verlauf</button>'
             + '</td></tr>';
         }).join("") : '<tr><td colspan="6" class="vg-leer">Für diese Woche wurde noch nichts angelegt.</td></tr>';
@@ -267,6 +436,9 @@
         });
         document.querySelectorAll("#vgWocheBody [data-detail]").forEach(function (b) {
           b.onclick = function () { detailOeffnen(Number(b.dataset.detail)); };
+        });
+        document.querySelectorAll("#vgWocheBody [data-edit]").forEach(function (b) {
+          b.onclick = function () { editOeffnen(Number(b.dataset.edit)); };
         });
       }).catch(function () {});
   }
@@ -330,6 +502,26 @@
           + (d.lohn_ohne_mitarbeiter && d.lohn_ohne_mitarbeiter.length
             ? '<br><span class="vg-warn">Im Lohn, aber nicht unter Mitarbeiter: '
               + esc(d.lohn_ohne_mitarbeiter.join(", ")) + '</span>' : "");
+
+        /* Steht in der gewählten Woche nichts, aber woanders schon: anbieten
+           statt still einen fremden Betrag zu nehmen. Beim Bargeld wäre das
+           der teuerste aller Fehler. */
+        var alt = document.getElementById("vgStapelAlt");
+        var vorschlaege = (!treffer && d.lohn_alternativen) ? d.lohn_alternativen : [];
+        alt.innerHTML = vorschlaege.length
+          ? '<span>Beträge stehen in: </span>' + vorschlaege.map(function (a) {
+              return '<button class="vg-mini" type="button" data-alt="'
+                + esc(a.monat) + '|' + a.woche_nr + '">' + esc(monatText(a.monat))
+                + ', Woche ' + a.woche_nr + ' (' + a.treffer + ')</button>';
+            }).join("")
+          : "";
+        alt.style.display = vorschlaege.length ? "" : "none";
+        alt.querySelectorAll("[data-alt]").forEach(function (b) {
+          b.onclick = function () {
+            var teile = b.dataset.alt.split("|");
+            stapelOeffnen(teile[0], Number(teile[1]));
+          };
+        });
 
         document.getElementById("vgStapelBody").innerHTML = d.fahrer.map(function (f) {
           return '<tr' + (f.schon_angelegt ? ' class="vg-schon"' : '') + '>'
@@ -401,6 +593,8 @@
       + '<div class="vg-zeile-akt">'
       +   (!erledigt && ZUSTAND.darf_bearbeiten
           ? '<button class="vg-mini vg-mini-green" data-haken="' + v.id + '" type="button">Abhaken</button>' : "")
+      +   (ZUSTAND.darf_bearbeiten
+          ? '<button class="vg-mini" data-edit="' + v.id + '" type="button">Bearbeiten</button>' : "")
       +   '<button class="vg-mini" data-detail="' + v.id + '" type="button">Verlauf</button>'
       + '</div></div>';
   }
@@ -432,11 +626,17 @@
     var karte = document.getElementById("vgNeuKarte");
     if (karte) karte.style.display = ZUSTAND.darf_bearbeiten ? "" : "none";
 
-    document.querySelectorAll("[data-haken]").forEach(function (b) {
-      b.onclick = function () { hakenOeffnen(Number(b.dataset.haken)); };
-    });
-    document.querySelectorAll("[data-detail]").forEach(function (b) {
-      b.onclick = function () { detailOeffnen(Number(b.dataset.detail)); };
+    var listen = "#vgOffen, #vgErledigt";
+    listen.split(", ").forEach(function (wo) {
+      document.querySelectorAll(wo + " [data-haken]").forEach(function (b) {
+        b.onclick = function () { hakenOeffnen(Number(b.dataset.haken)); };
+      });
+      document.querySelectorAll(wo + " [data-detail]").forEach(function (b) {
+        b.onclick = function () { detailOeffnen(Number(b.dataset.detail)); };
+      });
+      document.querySelectorAll(wo + " [data-edit]").forEach(function (b) {
+        b.onclick = function () { editOeffnen(Number(b.dataset.edit)); };
+      });
     });
     sidebarZahl(ZUSTAND.anzahl_offen || 0);
   }
@@ -583,6 +783,78 @@
     meldung("vgHakenMsg", "");
     document.getElementById("vgBackdrop").style.display = "block";
     document.getElementById("vgHakenModal").style.display = "block";
+  }
+
+  /* ── Bearbeiten und Stornieren ─────────────────────────────────── */
+  var EDIT = null;
+
+  function editOeffnen(id) {
+    fetch("/vorgaenge/" + id, { headers: kopf() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) {
+        if (!v) return;
+        EDIT = v;
+        var fertig = v.status === "erledigt";
+        document.getElementById("vgEditSub").textContent = fertig
+          ? "Abgehakt von " + (v.erledigt_von_name || "?") + " am " + (v.erledigt_am || "")
+            + ". Jede Änderung wird im Verlauf festgehalten."
+          : "Angelegt von " + (v.erstellt_von_name || "?")
+            + ". Jede Änderung wird im Verlauf festgehalten.";
+        document.getElementById("vgEditTitel").value = v.titel || "";
+        document.getElementById("vgEditBetrag").value = v.betrag_soll_cent ? v.betrag_soll : "";
+        document.getElementById("vgEditIstFeld").style.display = fertig ? "" : "none";
+        document.getElementById("vgEditIst").value = fertig && v.betrag_ist_cent ? v.betrag_ist : "";
+        document.getElementById("vgEditFaellig").value = v.faellig_am || "";
+        document.getElementById("vgEditGrund").value = "";
+        document.getElementById("vgEditPflicht").textContent =
+          "(Pflicht, sobald ein Betrag geändert wird)";
+        meldung("vgEditMsg", "");
+        document.getElementById("vgBackdrop").style.display = "block";
+        document.getElementById("vgEditModal").style.display = "block";
+      }).catch(function () {});
+  }
+
+  function editSenden() {
+    if (!EDIT) return;
+    var daten = {
+      titel: document.getElementById("vgEditTitel").value,
+      betrag: document.getElementById("vgEditBetrag").value || "0",
+      faellig_am: document.getElementById("vgEditFaellig").value,
+      grund: document.getElementById("vgEditGrund").value
+    };
+    if (EDIT.status === "erledigt") daten.betrag_ist = document.getElementById("vgEditIst").value || "0";
+    fetch("/vorgaenge/" + EDIT.id, {
+      method: "PATCH", headers: kopf({ "Content-Type": "application/json" }),
+      body: JSON.stringify(daten)
+    }).then(function (r) {
+      if (!r.ok) return fehlertext(r).then(function (t) { meldung("vgEditMsg", t, "fehler"); });
+      dialogeZu();
+      nachAenderung();
+    }).catch(function () { meldung("vgEditMsg", "Verbindung fehlgeschlagen.", "fehler"); });
+  }
+
+  function stornoStarten() {
+    if (!EDIT) return;
+    var grund = (document.getElementById("vgEditGrund").value || "").trim();
+    if (!grund) {
+      meldung("vgEditMsg", "Bitte trage oben einen Grund ein – dann kann ich stornieren.", "fehler");
+      return;
+    }
+    fetch("/vorgaenge/" + EDIT.id + "/stornieren", {
+      method: "POST", headers: kopf({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ text: grund })
+    }).then(function (r) {
+      if (!r.ok) return fehlertext(r).then(function (t) { meldung("vgEditMsg", t, "fehler"); });
+      dialogeZu();
+      nachAenderung();
+      fcInfo("Storniert", "Der Vorgang zählt nicht mehr mit. Im Fahrerkonto bleibt er nachlesbar.", "info");
+    }).catch(function () { meldung("vgEditMsg", "Verbindung fehlgeschlagen.", "fehler"); });
+  }
+
+  function nachAenderung() {
+    laden();
+    if (TAB === "woche") wocheLaden(AKTUELLE_KW);
+    if (TAB === "konto") { KONTO_ID ? kontoOeffnen(KONTO_ID) : kontenLaden(); }
   }
 
   /* Cent zu deutschem Euro-Text: 137540 -> "1.375,40" */
@@ -845,6 +1117,9 @@
             document.getElementById("vgWocheBtn").onclick = function () { stapelOeffnen("", 0); };
             document.getElementById("vgStapelOk").onclick = stapelSenden;
             document.getElementById("vgStapelAbbruch").onclick = dialogeZu;
+            document.getElementById("vgKontoZurueck").onclick = function () {
+              KONTO_ID = 0; kontenLaden();
+            };
 
             // Restbetrag-Zeile mitrechnen, waehrend getippt wird
             document.getElementById("vgHakenBetrag").addEventListener("input", restZeileAktualisieren);

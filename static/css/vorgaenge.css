@@ -193,3 +193,62 @@ body.fc-shell .vg-haken-rest b{color:#f59e0b}
   font-size: 12px;
   color: var(--yellow, #eab308);
 }
+
+/* ── Fahrerkonten ───────────────────────────────────────────────── */
+.vg-kacheln {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 4px 0 18px;
+}
+.vg-kachel {
+  padding: 14px 16px;
+  border: 1px solid var(--border, #27272a);
+  border-radius: 12px;
+  background: var(--bg2, #18181b);
+}
+.vg-kachel-wert {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text, #fafafa);
+}
+.vg-kachel-titel {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text3, #a1a1aa);
+}
+.vg-kachel-rot .vg-kachel-wert { color: var(--red, #f87171); }
+.vg-kachel-gruen .vg-kachel-wert { color: var(--accent, #10b981); }
+
+.vg-kontokopf {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.vg-kontokopf h3 { margin: 0; font-size: 18px; }
+
+.vg-klickbar { cursor: pointer; }
+.vg-klickbar:hover { background: var(--bg2, #18181b); }
+
+/* ── Ausweichwochen im Stapel-Dialog ────────────────────────────── */
+.vg-alt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--yellow, #eab308);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text2, #d4d4d8);
+}
+
+/* ── Roter Knopf fürs Stornieren ────────────────────────────────── */
+.vg-btn-rot {
+  border-color: var(--red, #ef4444);
+  color: var(--red, #f87171);
+}
+.vg-btn-rot:hover { background: rgba(239, 68, 68, .12); }
