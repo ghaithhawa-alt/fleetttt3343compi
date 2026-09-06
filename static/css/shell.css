@@ -125,10 +125,52 @@ body.fc-shell .start-mod-arrow svg{
   stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
 }
 
+/* ── Schmale Bildschirme: Seitenleiste als ausfahrbares Menü ──────
+   Vorher stand hier display:none - damit war am Telefon kein Modul
+   mehr erreichbar. Jetzt bleibt sie da und fährt über den Knopf ein
+   und aus. */
+body.fc-shell .fc-burger{ display: none; }
+body.fc-shell .fc-side-schatten{ display: none; }
+
 @media (max-width: 900px){
-  body.fc-shell{ padding-left: 0; }
-  body.fc-shell .fc-side{ display: none; }
+  body.fc-shell{ padding-left: 0; padding-top: 56px; }
   body.fc-shell .fc-cfg-toggle{ display: none; }
+
+  body.fc-shell .fc-burger{
+    display: flex; align-items: center; justify-content: center;
+    position: fixed; top: 8px; left: 8px; z-index: 120;
+    width: 42px; height: 42px; padding: 0;
+    background: #111111; color: #fafafa;
+    border: 1px solid var(--shell-border2); border-radius: 11px;
+    cursor: pointer;
+  }
+  body.fc-shell .fc-burger svg{ width: 21px; height: 21px; }
+  body.fc-shell .fc-burger:active{ background: #1a1a1a; }
+
+  body.fc-shell .fc-side{
+    width: min(272px, 84vw);
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    z-index: 115;
+    box-shadow: 0 0 40px rgba(0,0,0,.6);
+    padding-top: 58px;
+  }
+  body.fc-menue-auf .fc-side{ transform: translateX(0); }
+
+  body.fc-shell .fc-side-schatten{
+    display: block; position: fixed; inset: 0; z-index: 110;
+    background: rgba(0,0,0,.6);
+    opacity: 0; pointer-events: none; transition: opacity .22s ease;
+  }
+  body.fc-menue-auf .fc-side-schatten{ opacity: 1; pointer-events: auto; }
+  body.fc-menue-auf{ overflow: hidden; }
+
+  /* Fingerfreundliche Ziele im Menü */
+  body.fc-shell .fc-side-btn{ padding: 12px 12px; font-size: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  body.fc-shell .fc-side, body.fc-shell .fc-side-schatten{ transition: none; }
 }
 @media (prefers-reduced-motion: reduce){
   body.fc-shell .start-mod, body.fc-shell .start-mod-arrow, body.fc-shell .fc-side-btn{ transition: none; }

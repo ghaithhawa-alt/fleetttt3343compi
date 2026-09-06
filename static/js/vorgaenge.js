@@ -305,11 +305,11 @@
               return '<tr class="vg-klickbar" data-konto="' + z.mitarbeiter_id + '">'
                 + '<td class="vg-name">' + esc(z.name)
                 +   (z.aktiv ? "" : ' <span class="vg-badge">ausgeschieden</span>') + '</td>'
-                + '<td class="r geld ' + (z.offen_cent ? "minus" : "") + '">' + esc(z.offen) + '</td>'
-                + '<td class="r geld">' + esc(z.gestellt) + '</td>'
-                + '<td class="r geld">' + esc(z.erhalten) + '</td>'
-                + '<td class="r geld">' + (z.abgeschrieben_cent ? esc(z.abgeschrieben) : "–") + '</td>'
-                + '<td>' + (z.letzte_zahlung ? esc(datumKurz(z.letzte_zahlung.slice(0, 10))) : "–") + '</td>'
+                + '<td class="r geld ' + (z.offen_cent ? "minus" : "") + '" data-sp="Offen">' + esc(z.offen) + '</td>'
+                + '<td class="r geld" data-sp="Gestellt">' + esc(z.gestellt) + '</td>'
+                + '<td class="r geld" data-sp="Erhalten">' + esc(z.erhalten) + '</td>'
+                + '<td class="r geld" data-sp="Abgeschrieben">' + (z.abgeschrieben_cent ? esc(z.abgeschrieben) : "–") + '</td>'
+                + '<td data-sp="Letzte Zahlung">' + (z.letzte_zahlung ? esc(datumKurz(z.letzte_zahlung.slice(0, 10))) : "–") + '</td>'
                 + '<td class="r"><button class="vg-mini" data-konto="' + z.mitarbeiter_id
                 +   '" type="button">Historie</button></td></tr>';
             }).join("")
@@ -363,11 +363,11 @@
                 + '<td class="vg-name">' + esc(z.titel)
                 +   '<div class="vg-unten">' + (wann ? esc(datumKurz(wann)) : "")
                 +     (z.erledigt_von_name ? " · " + esc(z.erledigt_von_name) : "") + '</div></td>'
-                + '<td class="r geld">' + esc(z.soll) + '</td>'
-                + '<td class="r geld">' + (z.ist ? esc(z.ist) : "–") + '</td>'
-                + '<td class="r geld ' + (z.fehlbetrag ? "minus" : "") + '">'
+                + '<td class="r geld" data-sp="Gefordert">' + esc(z.soll) + '</td>'
+                + '<td class="r geld" data-sp="Erhalten">' + (z.ist ? esc(z.ist) : "–") + '</td>'
+                + '<td class="r geld ' + (z.fehlbetrag ? "minus" : "") + '" data-sp="Fehlt">'
                 +   (z.fehlbetrag ? esc(z.fehlbetrag) : "–") + '</td>'
-                + '<td class="r geld">' + esc(z.stand) + '</td>'
+                + '<td class="r geld" data-sp="Stand danach">' + esc(z.stand) + '</td>'
                 + '<td>' + marke + '</td>'
                 + '<td class="r">'
                 +   (z.status !== "storniert" && ZUSTAND.darf_bearbeiten
@@ -407,9 +407,9 @@
           var diff = v.status === "offen" ? "" : v.differenz_cent;
           return '<tr>'
             + '<td class="vg-name">' + esc(v.mitarbeiter_name || v.titel) + '</td>'
-            + '<td class="r geld">' + esc(v.betrag_soll) + '</td>'
-            + '<td class="r geld">' + (v.status === "offen" ? "–" : esc(v.betrag_ist)) + '</td>'
-            + '<td class="r geld ' + (diff < 0 ? "minus" : (diff > 0 ? "plus" : "")) + '">'
+            + '<td class="r geld" data-sp="Soll">' + esc(v.betrag_soll) + '</td>'
+            + '<td class="r geld" data-sp="Erhalten">' + (v.status === "offen" ? "–" : esc(v.betrag_ist)) + '</td>'
+            + '<td class="r geld ' + (diff < 0 ? "minus" : (diff > 0 ? "plus" : "")) + '" data-sp="Differenz">'
             +   (v.status === "offen" ? "–"
                 : (diff === 0 ? "0,00" : (diff > 0 ? "+" : "") + alsEuro(diff)))
             + '</td>'

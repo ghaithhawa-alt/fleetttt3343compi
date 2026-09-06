@@ -308,3 +308,117 @@ body.fc-shell .vg-fest {
   color: #d4d4d8;
 }
 body.fc-shell .vg-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   TELEFON UND TABLET
+   Der Dispatcher kassiert am Auto ab und hakt dort ab - nicht am
+   Schreibtisch. Alles ab hier dient nur diesem einen Ablauf.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 760px) {
+
+  /* ── Kopfzeile: Knopf und Zähler unter den Titel ── */
+  body.fc-shell .vg-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  body.fc-shell .vg-kopf-rechts { justify-content: space-between; }
+  body.fc-shell .vg-kopf-rechts .vg-btn { flex: 1; }
+
+  /* ── Reiter: seitlich wischbar statt umgebrochen ── */
+  body.fc-shell .vg-reiter {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  body.fc-shell .vg-reiter::-webkit-scrollbar { display: none; }
+  body.fc-shell .vg-reiter-btn { white-space: nowrap; padding: 10px 14px; font-size: 14px; }
+
+  /* ── Listenzeilen: Text oben, Knöpfe darunter in voller Breite ── */
+  body.fc-shell .vg-zeile { flex-direction: column; align-items: stretch; gap: 10px; }
+  body.fc-shell .vg-zeile-akt { justify-content: flex-start; flex-wrap: wrap; }
+  body.fc-shell .vg-zeile-akt .vg-mini { flex: 1; min-width: 92px; }
+
+  /* ── Tabellen werden zu Karten ──
+     Eine sechsspaltige Tabelle ist auf 390px nicht lesbar. Jede Zeile
+     wird zur Karte, jeder Wert bekommt seinen Spaltennamen davor. */
+  body.fc-shell .vg-table-wrap { overflow-x: visible; background: transparent; border: 0; }
+  /* Die Mindestbreite von 560px gilt für die Tabellenform. Als Karten
+     darf die Tabelle nicht breiter sein als der Bildschirm - sonst
+     stehen die Beträge rechts außerhalb und man sieht nur die Titel. */
+  body.fc-shell .vg-table { min-width: 0; width: 100%; }
+  body.fc-shell .vg-table thead { display: none; }
+  body.fc-shell .vg-table,
+  body.fc-shell .vg-table tbody,
+  body.fc-shell .vg-table tfoot,
+  body.fc-shell .vg-table tr,
+  body.fc-shell .vg-table td { display: block; width: auto; }
+  body.fc-shell .vg-table tr {
+    background: #111;
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    padding: 6px 4px;
+  }
+  body.fc-shell .vg-table td {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 8px 14px; border: 0; text-align: right;
+  }
+  body.fc-shell .vg-table td[data-sp]::before {
+    content: attr(data-sp);
+    font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: #71717a; font-weight: 600; text-align: left; flex-shrink: 0;
+  }
+  body.fc-shell .vg-table td.vg-name {
+    justify-content: flex-start; text-align: left;
+    font-weight: 600; color: #fafafa; font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,.06); margin-bottom: 4px;
+  }
+  body.fc-shell .vg-table td.r { text-align: right; }
+  body.fc-shell .vg-table td:empty { display: none; }
+  body.fc-shell .vg-table tfoot tr { background: #141414; }
+  body.fc-shell .vg-table td .vg-mini { flex: 1; }
+
+  /* ── Kacheln nebeneinander statt untereinander ── */
+  body.fc-shell .vg-kacheln { grid-template-columns: 1fr 1fr; gap: 8px; }
+  body.fc-shell .vg-kachel { padding: 12px; }
+  body.fc-shell .vg-kachel-wert { font-size: 18px; }
+
+  /* ── Filterzeile ── */
+  body.fc-shell .vg-filter > * { flex: 1 1 46%; }
+
+  /* ── Dialoge: von unten, volle Breite, scrollbar ── */
+  body.fc-shell .vg-modal,
+  body.fc-shell .vg-modal-breit {
+    width: 100%; max-width: none;
+    top: auto; bottom: 0; left: 0; transform: none;
+    max-height: 92vh; overflow-y: auto;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  body.fc-shell .vg-modal-foot { flex-direction: column-reverse; }
+  body.fc-shell .vg-modal-foot .vg-btn { width: 100%; padding: 12px; }
+  body.fc-shell .vg-quelle { flex-direction: column; align-items: stretch; }
+  body.fc-shell .vg-quelle select { width: 100%; }
+
+  /* Eingabefelder mindestens 16px - darunter zoomt iOS beim Antippen
+     in das Feld hinein, und der halbe Dialog rutscht aus dem Bild. */
+  body.fc-shell .vg-felder input,
+  body.fc-shell .vg-felder select,
+  body.fc-shell .vg-stapel-feld,
+  body.fc-shell .vg-filter input,
+  body.fc-shell .vg-filter select,
+  body.fc-shell .vg-quelle select { font-size: 16px; height: 44px; }
+  body.fc-shell .vg-stapel-feld { width: 130px; }
+
+  /* Fingerfreundliche Ziele */
+  body.fc-shell .vg-mini { min-height: 38px; padding: 0 14px; }
+  body.fc-shell .vg-wahl-btn { padding: 14px; }
+  body.fc-shell .vg-haken-rest { padding: 12px; }
+
+  /* Zweispaltige Seite wird einspaltig, Karte "Neuer Vorgang" nach unten */
+  body.fc-shell .vg-spalten { grid-template-columns: 1fr; }
+  body.fc-shell .vg-rechts { order: 2; }
+}
+
+/* Sehr schmal: Kacheln untereinander */
+@media (max-width: 420px) {
+  body.fc-shell .vg-kacheln { grid-template-columns: 1fr; }
+}

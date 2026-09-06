@@ -157,6 +157,50 @@
 
     document.body.appendChild(side);
 
+    /* ── Menü für schmale Bildschirme ──────────────────────────────
+       Unter 900px hat die Seitenleiste keinen Platz. Früher wurde sie
+       dort ersatzlos ausgeblendet - damit war am Telefon kein einziges
+       Modul mehr erreichbar. Jetzt fährt sie über einen Knopf aus. */
+    var BURGER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+      + 'stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>';
+    var KREUZ = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+      + 'stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
+    var burger = document.createElement("button");
+    burger.type = "button";
+    burger.className = "fc-burger";
+    burger.setAttribute("aria-label", "Menü öffnen");
+    burger.setAttribute("aria-expanded", "false");
+    burger.innerHTML = BURGER;
+
+    var schatten = document.createElement("div");
+    schatten.className = "fc-side-schatten";
+
+    function menue(auf) {
+      document.body.classList.toggle("fc-menue-auf", auf);
+      burger.setAttribute("aria-expanded", auf ? "true" : "false");
+      burger.setAttribute("aria-label", auf ? "Menü schließen" : "Menü öffnen");
+      burger.innerHTML = auf ? KREUZ : BURGER;
+    }
+    burger.onclick = function () {
+      menue(!document.body.classList.contains("fc-menue-auf"));
+    };
+    schatten.onclick = function () { menue(false); };
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") menue(false);
+    });
+    /* Nach der Wahl eines Moduls schließt sich das Menü von selbst -
+       sonst verdeckt es genau die Seite, die man sehen wollte. */
+    side.addEventListener("click", function (e) {
+      if (e.target.closest(".fc-side-btn")) menue(false);
+    });
+    window.addEventListener("resize", function () {
+      if (window.innerWidth > 900) menue(false);
+    });
+
+    document.body.appendChild(schatten);
+    document.body.appendChild(burger);
+
     /* ── Aktiv-Markierung folgt dem echten Seiten-Zustand ── */
     var PAGES = [["start", "startPage"]].concat(MODULE.map(function (m) { return [m.id, m.page]; }));
     function syncActive() {
