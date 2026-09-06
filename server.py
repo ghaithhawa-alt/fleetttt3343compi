@@ -1801,16 +1801,37 @@ def license_status(current: User = Depends(get_current_user),
     return payload
 
 
+# Wird bei jeder Aenderung hochgezaehlt. Damit laesst sich in einer Sekunde
+# feststellen, welcher Stand wirklich laeuft - zweimal hat Unklarheit darueber
+# eine Fehlersuche in die falsche Richtung geschickt.
+APP_VERSION = "2026.09.06"
+APP_STAND = "Vorgaenge: Automatik, Vier-Augen, Kassenabgleich, Belege"
+
+
+def _version_info() -> dict:
+    try:
+        gebaut = datetime.utcfromtimestamp(
+            Path(__file__).stat().st_mtime).strftime("%d.%m.%Y %H:%M")
+    except Exception:
+        gebaut = ""
+    return {"version": APP_VERSION, "stand": APP_STAND, "datei_vom": gebaut}
+
+
 @app.get("/version")
 def version():
-    return {"version": "cloud-1.0",
-            "endpoints": ["/geocode", "/reverse", "/check_terrain", "/route",
-                          "/license-status", "/version"]}
+    """Welcher Stand laeuft gerade? Die Felder der alten Auskunft bleiben
+    erhalten, damit nichts bricht, was sie schon abfragt."""
+    d = _version_info()
+    d["endpoints"] = ["/geocode", "/reverse", "/check_terrain", "/route",
+                      "/license-status", "/version"]
+    return d
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "FleetCompliance API"}
+    d = {"status": "ok", "service": "FleetCompliance API"}
+    d.update(_version_info())
+    return d
 
 
 # ─────────────── Desktop-Altlasten (harmlose No-Ops) ───────────────
@@ -3892,9 +3913,42 @@ def lohn_diagnose(current: User = Depends(get_wirk_user),
     heute = date.today()
     montag = heute - timedelta(days=heute.weekday())
     suche = _lohn_woche_suchen(session, firma.id, montag)
+    woche = _kw_text(montag)
+
+    # Warum hat die Automatik (nichts) angelegt? Genau das ist die Frage, die
+    # man sich sonst nicht selbst beantworten kann.
+    lohn = _lohn_wochenwerte(session, firma.id, montag)
+    bestand = {}
+    for v in session.exec(select(Vorgang).where(
+            Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
+            Vorgang.periode == woche, Vorgang.status != "storniert")).all():
+        bestand[v.mitarbeiter_id] = v
+
+    automatik = []
+    for m in leute:
+        if not m.aktiv:
+            continue
+        wert = lohn["werte"].get(_name_schluessel(m.name), 0)
+        da = bestand.get(m.id)
+        if da is not None:
+            grund = ("steht schon in der Liste (angelegt von "
+                     + (da.erstellt_von_name or "?") + ")")
+        elif wert <= 0:
+            grund = "im Lohn steht für diese Woche kein Betrag unter „Offen“"
+        else:
+            grund = "wird beim nächsten Öffnen der Vorgänge angelegt"
+        automatik.append({"name": m.name, "lohn_betrag": _euro(wert),
+                          "vorhanden": da is not None, "grund": grund})
+
+    ohne_periode = len([v for v in session.exec(select(Vorgang).where(
+        Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren")).all()
+        if not (v.periode or "")])
 
     return {
         "firma": firma.name,
+        "version": APP_VERSION,
+        "automatik": automatik,
+        "ohne_kalenderwoche": ohne_periode,
         "kw": _kw_text(montag),
         "kw_von": montag.isoformat(),
         "kw_bis": (montag + timedelta(days=6)).isoformat(),
@@ -4366,6 +4420,11 @@ def vorgaenge_liste(q: str = "", art: str = "", mitarbeiter_id: Optional[int] = 
         "wartend": [_vorgang_dict(v) for v in wartend],
         "anzahl_wartend": len(wartend),
         "vier_augen": bool(firma.vier_augen),
+        # Das Recht kommt mit der Liste, nicht aus einem zweiten Aufruf -
+        # scheitert der still, fehlte vorher wortlos der ganze Schalter.
+        "darf_einstellen": ((current.rolle or ROLLE_INHABER) == ROLLE_INHABER
+                            or _is_superadmin(current)),
+        "version": APP_VERSION,
         "erledigt": [_vorgang_dict(v) for v in gefiltert[:grenze]],
         "erledigt_gesamt": len(gefiltert),
         "gefiltert": gefiltert_ist,
@@ -4423,15 +4482,30 @@ def vorgang_anlegen(data: VorgangNeuRequest,
                             detail="Bitte den Fahrer auswählen, bei dem kassiert werden soll.")
 
     titel = (data.titel or "").strip()
-    if not titel:
-        titel = (f"{ma_name} abkassieren" if art == "fahrer_kassieren"
-                 else VORGANG_ARTEN.get(art, "Aufgabe"))
+    if not titel and art != "fahrer_kassieren":
+        titel = VORGANG_ARTEN.get(art, "Aufgabe")
 
     faellig = _datum_oder_none(data.faellig_am) or date.today()
+    cent = _cent(data.betrag)
+
+    # Ein Abkassier-Auftrag ohne Betrag ist kein Auftrag: der Dispatcher weiss
+    # nicht, wie viel er holen soll, und abhaken kann er ihn auch nicht sinnvoll.
+    if art == "fahrer_kassieren" and cent <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Bitte den Betrag eintragen, der abkassiert werden soll.")
+
+    # Jeder Abkassier-Vorgang gehoert in eine Kalenderwoche - sonst fehlt er in
+    # der Wochenuebersicht, und weder der Restbetrag noch die Automatik finden
+    # ihn wieder. Massgeblich ist die Woche, in der er faellig wird.
+    periode = _kw_text(faellig) if art == "fahrer_kassieren" else ""
+
+    if not titel:
+        titel = f"{ma_name} abkassieren ({periode})"
 
     v = Vorgang(firma_id=firma.id, art=art, titel=titel[:160],
                 mitarbeiter_id=ma_id, mitarbeiter_name=ma_name,
-                betrag_soll_cent=_cent(data.betrag), faellig_am=faellig,
+                betrag_soll_cent=cent, faellig_am=faellig, periode=periode,
                 erstellt_von=current.id or 0, erstellt_von_name=_wer(current))
     session.add(v); session.commit(); session.refresh(v)
     _ereignis(session, v, current, "angelegt",

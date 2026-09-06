@@ -26,10 +26,10 @@
     + '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
 
   var ZUSTAND = { offen: [], wartend: [], erledigt: [], arten: [],
-                darf_bearbeiten: false, vier_augen: false };
+                darf_bearbeiten: false, vier_augen: false,
+                darf_einstellen: false, version: "" };
   var FAHRER = [];
   var OFFENES_DETAIL = null;
-  var DARF_EINSTELLEN = false;
 
   /* ── Seite ─────────────────────────────────────────────────────── */
   function buildPage() {
@@ -117,6 +117,7 @@
       +       '<button class="vg-mini" id="vgFilterWeg" type="button">Zurücksetzen</button>'
       +     '</div>'
       +     '<div id="vgErledigt" class="vg-liste vg-liste-blass"></div>'
+      +     '<div class="vg-version" id="vgVersion"></div>'
       +   '</div>'
       +   '<div class="vg-rechts" id="vgNeuKarte">'
       +     '<div class="vg-card">'
@@ -740,7 +741,7 @@
     /* Den Schalter sieht nur, wer ihn umlegen darf - der Inhaber. */
     var schalter = document.getElementById("vgVierAugen");
     if (schalter) {
-      schalter.style.display = DARF_EINSTELLEN ? "" : "none";
+      schalter.style.display = ZUSTAND.darf_einstellen ? "" : "none";
       document.getElementById("vgVierAugenAn").checked = !!ZUSTAND.vier_augen;
     }
 
@@ -759,6 +760,8 @@
         b.onclick = function () { bestaetigenOeffnen(Number(b.dataset.ok)); };
       });
     });
+    var vv = document.getElementById("vgVersion");
+    if (vv) vv.textContent = ZUSTAND.version ? "FleetCompliance " + ZUSTAND.version : "";
     sidebarZahl(ZUSTAND.anzahl_offen || 0);
   }
 
@@ -862,6 +865,13 @@
       var f = document.getElementById("vgFahrer").value;
       if (!f) { meldung("vgMsg", "Bitte zuerst einen Mitarbeiter anlegen.", "fehler"); return; }
       koerper.mitarbeiter_id = Number(f);
+      /* Ohne Betrag ist der Auftrag wertlos: der Dispatcher weiß nicht, wie
+         viel er holen soll, und abhaken lässt er sich auch nicht sinnvoll. */
+      if (alsCent(koerper.betrag) <= 0) {
+        meldung("vgMsg", "Bitte den Betrag eintragen, der abkassiert werden soll.", "fehler");
+        document.getElementById("vgBetrag").focus();
+        return;
+      }
     } else {
       koerper.titel = document.getElementById("vgTitel").value.trim();
       if (!koerper.titel) { meldung("vgMsg", "Bitte eintragen, was zu tun ist.", "fehler"); return; }
@@ -947,8 +957,27 @@
         var teile = [];
 
         teile.push('<div class="vg-diag-zeile"><b>Betrieb:</b> ' + esc(d.firma)
+          + ' · <b>Version:</b> ' + esc(d.version || "?")
           + ' · <b>Kalenderwoche:</b> ' + esc(d.kw) + ' ('
           + esc(datumKurz(d.kw_von)) + ' – ' + esc(datumKurz(d.kw_bis)) + ')</div>');
+
+        /* Was hat die Automatik getan - und warum nicht mehr? */
+        if (d.automatik && d.automatik.length) {
+          teile.push('<div class="vg-diag-zeile"><b>Vorgänge dieser Woche:</b></div>');
+          teile.push('<table class="vg-table vg-table-eng"><thead><tr>'
+            + '<th>Fahrer</th><th class="r">Im Lohn</th><th>Stand</th></tr></thead><tbody>'
+            + d.automatik.map(function (a) {
+                return '<tr><td>' + esc(a.name) + '</td>'
+                  + '<td class="r">' + esc(a.lohn_betrag) + '</td>'
+                  + '<td>' + (a.vorhanden ? esc(a.grund)
+                      : '<span class="vg-warn">' + esc(a.grund) + '</span>') + '</td></tr>';
+              }).join("") + '</tbody></table>');
+        }
+        if (d.ohne_kalenderwoche) {
+          teile.push('<div class="vg-warn">' + d.ohne_kalenderwoche
+            + ' Abkassier-Vorgänge haben keine Kalenderwoche. Sie stammen aus einer '
+            + 'älteren Version und fehlen deshalb in der Wochenübersicht.</div>');
+        }
 
         if (!d.monate.length) {
           teile.push('<div class="vg-warn">Im Lohn-Modul ist für diesen Betrieb noch '
@@ -1447,13 +1476,6 @@
               if (k.style.display === "none") diagnoseLaden();
               else k.style.display = "none";
             };
-            fetch("/vorgaenge/einstellungen", { headers: kopf() })
-              .then(function (r) { return r.ok ? r.json() : null; })
-              .then(function (d) {
-                if (!d) return;
-                DARF_EINSTELLEN = !!d.darf_aendern;
-                zeichnen();
-              }).catch(function () {});
             document.getElementById("vgVierAugenAn").onchange = function () {
               var an = document.getElementById("vgVierAugenAn").checked;
               fetch("/vorgaenge/einstellungen", {

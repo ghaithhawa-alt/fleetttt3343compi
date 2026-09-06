@@ -447,3 +447,9 @@ body.fc-shell .vg-kasse-hinweis.warn { color: #eab308; }
 
 /* Guthaben: grün statt rot, weil es dem Fahrer gehört */
 body.fc-shell .vg-table td.plus, body.fc-shell .geld.plus { color: #10b981; }
+
+/* Versionsanzeige - damit nie wieder unklar ist, welcher Stand läuft */
+body.fc-shell .vg-version {
+  margin-top: 14px; font-size: 11px; color: #52525b;
+  font-family: 'JetBrains Mono', monospace;
+}
