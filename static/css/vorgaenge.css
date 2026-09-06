@@ -1,0 +1,455 @@
+/* Vorgänge: Übergaben zwischen Buchhaltung und Disposition */
+
+body.fc-shell #vorgaengePage.vg-page{padding:24px 32px!important;max-width:none!important;margin:0!important}
+
+body.fc-shell .vg-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:20px}
+body.fc-shell .vg-head h2{font-size:20px;font-weight:700;color:#fafafa;margin:0 0 4px;letter-spacing:-.01em}
+body.fc-shell .vg-head p{font-size:12.5px;color:#71717a;margin:0}
+
+body.fc-shell .vg-zaehler{flex-shrink:0;text-align:right;background:#111;
+  border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 16px;line-height:1.3}
+body.fc-shell .vg-zaehler-zahl{display:block;font-size:18px;font-weight:600;color:#fafafa;
+  font-variant-numeric:tabular-nums}
+body.fc-shell .vg-zaehler-text{display:block;font-size:11px;color:#71717a}
+body.fc-shell .vg-zaehler-warn{border-color:rgba(239,68,68,.35)}
+body.fc-shell .vg-zaehler-warn .vg-zaehler-zahl{color:#ef4444}
+
+body.fc-shell .vg-spalten{display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start}
+@media(max-width:1050px){body.fc-shell .vg-spalten{grid-template-columns:1fr}}
+
+body.fc-shell .vg-sec{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#71717a;
+  font-weight:600;margin:0 0 8px}
+body.fc-shell .vg-sec-klein{margin-top:24px}
+
+body.fc-shell .vg-liste{background:#111;border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;overflow:hidden}
+body.fc-shell .vg-liste-blass{opacity:.72}
+
+body.fc-shell .vg-zeile{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.05)}
+body.fc-shell .vg-zeile:last-child{border-bottom:none}
+body.fc-shell .vg-zeile-text{min-width:0;flex:1}
+body.fc-shell .vg-titel{font-size:13.5px;color:#fafafa;font-weight:500;margin-bottom:3px;
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+body.fc-shell .vg-unten{font-size:11.5px;color:#71717a}
+body.fc-shell .vg-zeile-akt{flex-shrink:0;white-space:nowrap}
+body.fc-shell .vg-zeile-fertig .vg-titel{color:#a1a1aa;font-weight:400}
+
+body.fc-shell .vg-geld{font-size:13px;color:#10b981;font-weight:600;font-variant-numeric:tabular-nums}
+body.fc-shell .vg-diff{color:#f59e0b}
+
+body.fc-shell .vg-badge{font-size:10px;padding:2px 8px;border-radius:20px;
+  background:rgba(255,255,255,.06);color:#a1a1aa;font-weight:500}
+body.fc-shell .vg-badge-rot{background:rgba(239,68,68,.14);color:#ef4444}
+body.fc-shell .vg-badge-gelb{background:rgba(245,158,11,.14);color:#f59e0b}
+body.fc-shell .vg-badge-gruen{background:rgba(16,185,129,.12);color:#10b981}
+
+body.fc-shell .vg-leer{padding:26px;text-align:center;font-size:12.5px;color:#71717a}
+
+body.fc-shell .vg-mini{background:transparent;border:1px solid rgba(255,255,255,.14);border-radius:8px;
+  padding:6px 11px;color:#a1a1aa;font-size:11.5px;font-weight:500;cursor:pointer;margin-left:6px;
+  font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .vg-mini:hover{color:#fafafa;border-color:rgba(255,255,255,.28)}
+body.fc-shell .vg-mini-green{border-color:rgba(16,185,129,.4);color:#10b981}
+body.fc-shell .vg-mini-green:hover{background:rgba(16,185,129,.1);border-color:#10b981;color:#10b981}
+
+/* Karte rechts */
+body.fc-shell .vg-card{background:#111;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px}
+body.fc-shell .vg-card-title{font-size:14px;font-weight:600;color:#fafafa;margin-bottom:14px}
+body.fc-shell .vg-felder{display:flex;flex-direction:column;gap:11px;margin-bottom:14px}
+body.fc-shell .vg-felder label{display:block;font-size:11.5px;color:#a1a1aa;margin-bottom:5px;font-weight:500}
+body.fc-shell .vg-felder input,body.fc-shell .vg-felder select{width:100%;height:38px;background:#0d0d0d;
+  border:1px solid rgba(255,255,255,.12);border-radius:9px;color:#fafafa;padding:0 11px;font-size:13px;
+  font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .vg-felder input:focus,body.fc-shell .vg-felder select:focus{outline:none;border-color:#10b981}
+
+body.fc-shell .vg-btn{background:transparent;border:1px solid rgba(255,255,255,.14);border-radius:9px;
+  padding:9px 15px;color:#e4e4e7;font-size:12.5px;font-weight:600;cursor:pointer;
+  font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .vg-btn:hover{border-color:rgba(255,255,255,.28)}
+body.fc-shell .vg-btn-green{background:#10b981;border-color:#10b981;color:#0a0a0a}
+body.fc-shell .vg-btn-green:hover{background:#0ea371;border-color:#0ea371}
+
+body.fc-shell .vg-msg{font-size:12px;margin-top:10px;min-height:16px;color:#71717a}
+body.fc-shell .vg-msg-fehler{color:#ef4444}
+body.fc-shell .vg-msg-ok{color:#10b981}
+
+/* Dialoge */
+body.fc-shell .vg-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9998}
+body.fc-shell .vg-modal{position:fixed;z-index:9999;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(440px,calc(100vw - 40px));background:#111;border:1px solid rgba(255,255,255,.1);
+  border-radius:16px;padding:24px;max-height:86vh;overflow-y:auto}
+body.fc-shell .vg-modal-breit{width:min(560px,calc(100vw - 40px))}
+body.fc-shell .vg-modal h3{font-size:16px;font-weight:600;color:#fafafa;margin:0 0 6px}
+body.fc-shell .vg-modal-sub{font-size:12.5px;color:#a1a1aa;margin:0 0 16px}
+body.fc-shell .vg-modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+/* Komplett / nicht komplett */
+body.fc-shell .vg-wahl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+body.fc-shell .vg-wahl-btn{background:#0d0d0d;border:1px solid rgba(255,255,255,.12);border-radius:10px;
+  padding:12px;color:#a1a1aa;font-size:13px;font-weight:600;cursor:pointer;
+  font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .vg-wahl-btn.on{border-color:#10b981;color:#10b981;background:rgba(16,185,129,.08)}
+body.fc-shell .vg-wahl-btn:nth-child(2).on{border-color:#f59e0b;color:#f59e0b;background:rgba(245,158,11,.08)}
+
+/* Zeitleiste */
+body.fc-shell .vg-verlauf{display:flex;flex-direction:column;gap:2px;margin-bottom:16px;
+  border-left:2px solid rgba(255,255,255,.08);padding-left:14px}
+body.fc-shell .vg-schritt{padding:8px 0}
+body.fc-shell .vg-schritt-kopf{display:flex;justify-content:space-between;gap:10px;
+  font-size:11.5px;color:#71717a}
+body.fc-shell .vg-schritt-kopf b{color:#fafafa;font-weight:600}
+body.fc-shell .vg-schritt-text{font-size:13px;color:#d4d4d8;margin-top:3px;line-height:1.45}
+body.fc-shell .vg-schritt-geld{font-size:12.5px;color:#10b981;margin-top:2px;
+  font-variant-numeric:tabular-nums}
+
+/* Zahl am Menüpunkt */
+body.fc-shell .fc-side-zahl{margin-left:auto;background:#ef4444;color:#fff;font-size:10.5px;
+  font-weight:700;min-width:18px;height:18px;line-height:18px;border-radius:9px;
+  padding:0 5px;text-align:center;font-variant-numeric:tabular-nums}
+
+/* ── Reiter, Wochenübersicht, Stapel, Filter ─────────────────────── */
+body.fc-shell .vg-kopf-rechts{display:flex;align-items:center;gap:12px;flex-shrink:0}
+
+body.fc-shell .vg-reiter{display:flex;gap:4px;margin-bottom:16px;
+  border-bottom:1px solid rgba(255,255,255,.07)}
+body.fc-shell .vg-reiter-btn{background:none;border:none;border-bottom:2px solid transparent;
+  padding:8px 14px;color:#71717a;font-size:13px;font-weight:600;cursor:pointer;
+  font-family:'Inter',system-ui,sans-serif;margin-bottom:-1px}
+body.fc-shell .vg-reiter-btn:hover{color:#a1a1aa}
+body.fc-shell .vg-reiter-btn.on{color:#10b981;border-bottom-color:#10b981}
+
+body.fc-shell .vg-wochenkopf{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+body.fc-shell .vg-kw{font-size:15px;font-weight:600;color:#fafafa;min-width:110px;text-align:center}
+body.fc-shell .vg-kw-datum{font-size:12px;color:#71717a}
+
+body.fc-shell .vg-table-wrap{background:#111;border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;overflow-x:auto;margin-bottom:18px}
+body.fc-shell .vg-table{width:100%;border-collapse:collapse;min-width:560px}
+body.fc-shell .vg-table th{text-align:left;font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+  color:#71717a;font-weight:600;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+body.fc-shell .vg-table td{padding:11px 16px;font-size:13px;color:#a1a1aa;
+  border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
+body.fc-shell .vg-table tbody tr:last-child td{border-bottom:none}
+body.fc-shell .vg-table th.r,body.fc-shell .vg-table td.r{text-align:right}
+body.fc-shell .vg-table .vg-name{color:#fafafa;font-weight:500}
+body.fc-shell .vg-table .geld{font-variant-numeric:tabular-nums;white-space:nowrap}
+body.fc-shell .vg-table .minus{color:#ef4444}
+body.fc-shell .vg-table .plus{color:#10b981}
+body.fc-shell .vg-table tfoot td{border-top:1px solid rgba(255,255,255,.12);border-bottom:none;
+  font-weight:600;color:#fafafa;font-size:12.5px;background:rgba(255,255,255,.02)}
+body.fc-shell .vg-schon td{opacity:.5}
+
+body.fc-shell .vg-stapel-feld{width:120px;height:34px;background:#0d0d0d;
+  border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#fafafa;padding:0 10px;
+  font-size:13px;text-align:right;font-variant-numeric:tabular-nums;
+  font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .vg-stapel-feld:focus{outline:none;border-color:#10b981}
+body.fc-shell .vg-stapel-feld:disabled{opacity:.4}
+
+body.fc-shell .vg-filter{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+body.fc-shell .vg-filter input,body.fc-shell .vg-filter select{height:34px;background:#0d0d0d;
+  border:1px solid rgba(255,255,255,.12);border-radius:9px;color:#fafafa;padding:0 10px;
+  font-size:12.5px;font-family:'Inter',system-ui,sans-serif}
+body.fc-shell .vg-filter input[type=search]{flex:1;min-width:180px}
+body.fc-shell .vg-filter input:focus,body.fc-shell .vg-filter select:focus{outline:none;border-color:#10b981}
+body.fc-shell .vg-treffer{float:right;font-size:10.5px;color:#10b981;text-transform:none;letter-spacing:0}
+
+body.fc-shell .vg-haken-rest{display:flex;align-items:flex-start;gap:9px;padding:11px 13px;
+  background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;
+  font-size:12.5px;color:#e4e4e7;cursor:pointer;line-height:1.45;margin-top:4px}
+body.fc-shell .vg-haken-rest input{margin-top:2px;accent-color:#f59e0b;flex-shrink:0}
+body.fc-shell .vg-haken-rest b{color:#f59e0b}
+
+/* ── Quelle der Beträge im Stapel-Dialog ────────────────────────── */
+.vg-quelle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #27272a);
+  border-radius: 10px;
+  background: var(--bg2, #18181b);
+}
+.vg-quelle label {
+  font-size: 12px;
+  color: var(--text3, #a1a1aa);
+  margin: 0;
+}
+.vg-quelle select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #3f3f46);
+  background: var(--bg, #0f0f11);
+  color: var(--text, #fafafa);
+  font-size: 13px;
+}
+.vg-quelle select:disabled { opacity: .45; cursor: not-allowed; }
+.vg-warn {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--yellow, #eab308);
+}
+
+/* ── Fahrerkonten ───────────────────────────────────────────────── */
+.vg-kacheln {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 4px 0 18px;
+}
+.vg-kachel {
+  padding: 14px 16px;
+  border: 1px solid var(--border, #27272a);
+  border-radius: 12px;
+  background: var(--bg2, #18181b);
+}
+.vg-kachel-wert {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text, #fafafa);
+}
+.vg-kachel-titel {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text3, #a1a1aa);
+}
+.vg-kachel-rot .vg-kachel-wert { color: var(--red, #f87171); }
+.vg-kachel-gruen .vg-kachel-wert { color: var(--accent, #10b981); }
+
+.vg-kontokopf {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.vg-kontokopf h3 { margin: 0; font-size: 18px; }
+
+.vg-klickbar { cursor: pointer; }
+.vg-klickbar:hover { background: var(--bg2, #18181b); }
+
+/* ── Ausweichwochen im Stapel-Dialog ────────────────────────────── */
+.vg-alt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--yellow, #eab308);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text2, #d4d4d8);
+}
+
+/* ── Roter Knopf fürs Stornieren ────────────────────────────────── */
+.vg-btn-rot {
+  border-color: var(--red, #ef4444);
+  color: var(--red, #f87171);
+}
+.vg-btn-rot:hover { background: rgba(239, 68, 68, .12); }
+
+/* ── Meldungsboxen des Dashboards über die Vorgangs-Dialoge legen ──
+   Die Bestätigungs- und Hinweisfenster (.ln-modal) liegen im Dashboard auf
+   z-index 1000, die Vorgangs-Dialoge auf 9999. Öffnet sich aus einem Dialog
+   heraus eine Meldung ("Grund fehlt", "Nicht möglich"), verschwand sie
+   dahinter - man sah nur, dass nichts passiert. */
+body.fc-shell .ln-modal { z-index: 10050; }
+
+/* ── Selbstauskunft im Stapel-Dialog ────────────────────────────── */
+.vg-hilfe { margin: 0 0 14px; }
+.vg-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text3, #a1a1aa);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.vg-link:hover { color: var(--text, #fafafa); }
+.vg-diagnose {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #27272a);
+  border-radius: 10px;
+  background: var(--bg2, #18181b);
+  font-size: 12px;
+  line-height: 1.55;
+  max-height: 320px;
+  overflow: auto;
+}
+.vg-diag-zeile { margin-bottom: 8px; color: var(--text2, #d4d4d8); }
+.vg-diagnose .vg-warn { display: block; margin-bottom: 8px; }
+.vg-table-eng th, .vg-table-eng td { padding: 6px 8px; font-size: 12px; }
+
+/* ── Dialoge: Tabellen dürfen nicht horizontal scrollen ─────────────
+   .vg-table hat min-width 560px für die breiten Seitentabellen. Im
+   Dialog ist der Innenraum schmaler - dort erschien dadurch ein
+   Scrollbalken, und die rechte Spalte lag außerhalb des Sichtfelds. */
+body.fc-shell .vg-modal .vg-table { min-width: 0; }
+body.fc-shell .vg-modal .vg-table th,
+body.fc-shell .vg-modal .vg-table td { padding: 10px 12px; }
+body.fc-shell .vg-modal-breit { width: min(660px, calc(100vw - 32px)); }
+
+/* Schon angelegte Zeilen: erkennbar, aber lesbar. Vorher waren sie so
+   blass, dass der übernommene Betrag wie ein leeres Feld aussah. */
+body.fc-shell .vg-schon td { opacity: 1; color: #71717a; }
+body.fc-shell .vg-schon .vg-name { color: #a1a1aa; }
+body.fc-shell .vg-fest {
+  display: inline-block;
+  min-width: 90px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #d4d4d8;
+}
+body.fc-shell .vg-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   TELEFON UND TABLET
+   Der Dispatcher kassiert am Auto ab und hakt dort ab - nicht am
+   Schreibtisch. Alles ab hier dient nur diesem einen Ablauf.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 760px) {
+
+  /* ── Kopfzeile: Knopf und Zähler unter den Titel ── */
+  body.fc-shell .vg-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  body.fc-shell .vg-kopf-rechts { justify-content: space-between; }
+  body.fc-shell .vg-kopf-rechts .vg-btn { flex: 1; }
+
+  /* ── Reiter: seitlich wischbar statt umgebrochen ── */
+  body.fc-shell .vg-reiter {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  body.fc-shell .vg-reiter::-webkit-scrollbar { display: none; }
+  body.fc-shell .vg-reiter-btn { white-space: nowrap; padding: 10px 14px; font-size: 14px; }
+
+  /* ── Listenzeilen: Text oben, Knöpfe darunter in voller Breite ── */
+  body.fc-shell .vg-zeile { flex-direction: column; align-items: stretch; gap: 10px; }
+  body.fc-shell .vg-zeile-akt { justify-content: flex-start; flex-wrap: wrap; }
+  body.fc-shell .vg-zeile-akt .vg-mini { flex: 1; min-width: 92px; }
+
+  /* ── Tabellen werden zu Karten ──
+     Eine sechsspaltige Tabelle ist auf 390px nicht lesbar. Jede Zeile
+     wird zur Karte, jeder Wert bekommt seinen Spaltennamen davor. */
+  body.fc-shell .vg-table-wrap { overflow-x: visible; background: transparent; border: 0; }
+  /* Die Mindestbreite von 560px gilt für die Tabellenform. Als Karten
+     darf die Tabelle nicht breiter sein als der Bildschirm - sonst
+     stehen die Beträge rechts außerhalb und man sieht nur die Titel. */
+  body.fc-shell .vg-table { min-width: 0; width: 100%; }
+  body.fc-shell .vg-table thead { display: none; }
+  body.fc-shell .vg-table,
+  body.fc-shell .vg-table tbody,
+  body.fc-shell .vg-table tfoot,
+  body.fc-shell .vg-table tr,
+  body.fc-shell .vg-table td { display: block; width: auto; }
+  body.fc-shell .vg-table tr {
+    background: #111;
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    padding: 6px 4px;
+  }
+  body.fc-shell .vg-table td {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 8px 14px; border: 0; text-align: right;
+  }
+  body.fc-shell .vg-table td[data-sp]::before {
+    content: attr(data-sp);
+    font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: #71717a; font-weight: 600; text-align: left; flex-shrink: 0;
+  }
+  body.fc-shell .vg-table td.vg-name {
+    justify-content: flex-start; text-align: left;
+    font-weight: 600; color: #fafafa; font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,.06); margin-bottom: 4px;
+  }
+  body.fc-shell .vg-table td.r { text-align: right; }
+  body.fc-shell .vg-table td:empty { display: none; }
+  body.fc-shell .vg-table tfoot tr { background: #141414; }
+  body.fc-shell .vg-table td .vg-mini { flex: 1; }
+
+  /* ── Kacheln nebeneinander statt untereinander ── */
+  body.fc-shell .vg-kacheln { grid-template-columns: 1fr 1fr; gap: 8px; }
+  body.fc-shell .vg-kachel { padding: 12px; }
+  body.fc-shell .vg-kachel-wert { font-size: 18px; }
+
+  /* ── Filterzeile ── */
+  body.fc-shell .vg-filter > * { flex: 1 1 46%; }
+
+  /* ── Dialoge: von unten, volle Breite, scrollbar ── */
+  body.fc-shell .vg-modal,
+  body.fc-shell .vg-modal-breit {
+    width: 100%; max-width: none;
+    top: auto; bottom: 0; left: 0; transform: none;
+    max-height: 92vh; overflow-y: auto;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  body.fc-shell .vg-modal-foot { flex-direction: column-reverse; }
+  body.fc-shell .vg-modal-foot .vg-btn { width: 100%; padding: 12px; }
+  body.fc-shell .vg-quelle { flex-direction: column; align-items: stretch; }
+  body.fc-shell .vg-quelle select { width: 100%; }
+
+  /* Eingabefelder mindestens 16px - darunter zoomt iOS beim Antippen
+     in das Feld hinein, und der halbe Dialog rutscht aus dem Bild. */
+  body.fc-shell .vg-felder input,
+  body.fc-shell .vg-felder select,
+  body.fc-shell .vg-stapel-feld,
+  body.fc-shell .vg-filter input,
+  body.fc-shell .vg-filter select,
+  body.fc-shell .vg-quelle select { font-size: 16px; height: 44px; }
+  body.fc-shell .vg-stapel-feld { width: 130px; }
+
+  /* Fingerfreundliche Ziele */
+  body.fc-shell .vg-mini { min-height: 38px; padding: 0 14px; }
+  body.fc-shell .vg-wahl-btn { padding: 14px; }
+  body.fc-shell .vg-haken-rest { padding: 12px; }
+
+  /* Zweispaltige Seite wird einspaltig, Karte "Neuer Vorgang" nach unten */
+  body.fc-shell .vg-spalten { grid-template-columns: 1fr; }
+  body.fc-shell .vg-rechts { order: 2; }
+}
+
+/* Sehr schmal: Kacheln untereinander */
+@media (max-width: 420px) {
+  body.fc-shell .vg-kacheln { grid-template-columns: 1fr; }
+}
+
+/* ── Vier-Augen-Prinzip ─────────────────────────────────────────── */
+body.fc-shell .vg-schalter {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: #a1a1aa; cursor: pointer;
+  padding: 0 12px 0 4px;
+}
+body.fc-shell .vg-schalter input { width: 16px; height: 16px; accent-color: #10b981; }
+
+body.fc-shell .vg-badge-blau {
+  background: rgba(59,130,246,.14);
+  color: #93c5fd;
+  border-color: rgba(59,130,246,.3);
+}
+body.fc-shell .vg-zeile-wartet { border-left: 3px solid rgba(59,130,246,.55); }
+
+/* ── Kassenabgleich ─────────────────────────────────────────────── */
+body.fc-shell .vg-kasse-hinweis {
+  margin-top: 6px; font-size: 11.5px; color: #71717a; line-height: 1.5;
+}
+body.fc-shell .vg-kasse-hinweis.ok { color: #10b981; }
+body.fc-shell .vg-kasse-hinweis.warn { color: #eab308; }
+
+/* Guthaben: grün statt rot, weil es dem Fahrer gehört */
+body.fc-shell .vg-table td.plus, body.fc-shell .geld.plus { color: #10b981; }
+
+/* Versionsanzeige - damit nie wieder unklar ist, welcher Stand läuft */
+body.fc-shell .vg-version {
+  margin-top: 14px; font-size: 11px; color: #52525b;
+  font-family: 'JetBrains Mono', monospace;
+}
