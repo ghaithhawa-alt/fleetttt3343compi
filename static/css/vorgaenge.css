@@ -252,3 +252,37 @@ body.fc-shell .vg-haken-rest b{color:#f59e0b}
   color: var(--red, #f87171);
 }
 .vg-btn-rot:hover { background: rgba(239, 68, 68, .12); }
+
+/* ── Meldungsboxen des Dashboards über die Vorgangs-Dialoge legen ──
+   Die Bestätigungs- und Hinweisfenster (.ln-modal) liegen im Dashboard auf
+   z-index 1000, die Vorgangs-Dialoge auf 9999. Öffnet sich aus einem Dialog
+   heraus eine Meldung ("Grund fehlt", "Nicht möglich"), verschwand sie
+   dahinter - man sah nur, dass nichts passiert. */
+body.fc-shell .ln-modal { z-index: 10050; }
+
+/* ── Selbstauskunft im Stapel-Dialog ────────────────────────────── */
+.vg-hilfe { margin: 0 0 14px; }
+.vg-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text3, #a1a1aa);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.vg-link:hover { color: var(--text, #fafafa); }
+.vg-diagnose {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #27272a);
+  border-radius: 10px;
+  background: var(--bg2, #18181b);
+  font-size: 12px;
+  line-height: 1.55;
+  max-height: 320px;
+  overflow: auto;
+}
+.vg-diag-zeile { margin-bottom: 8px; color: var(--text2, #d4d4d8); }
+.vg-diagnose .vg-warn { display: block; margin-bottom: 8px; }
+.vg-table-eng th, .vg-table-eng td { padding: 6px 8px; font-size: 12px; }

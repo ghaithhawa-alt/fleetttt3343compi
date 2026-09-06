@@ -176,6 +176,10 @@
       +     '<select id="vgStapelWoche"></select>'
       +   '</div>'
       +   '<div class="vg-alt" id="vgStapelAlt" style="display:none"></div>'
+      +   '<div class="vg-hilfe">'
+      +     '<button class="vg-link" id="vgWarumBtn" type="button">Warum steht hier nichts?</button>'
+      +     '<div class="vg-diagnose" id="vgDiagnose" style="display:none"></div>'
+      +   '</div>'
       +   '<div class="vg-table-wrap">'
       +     '<table class="vg-table"><thead><tr>'
       +       '<th>Fahrer</th><th class="r">Abzukassieren</th><th></th>'
@@ -534,6 +538,7 @@
             + '</tr>';
         }).join("") || '<tr><td colspan="3" class="vg-leer">Keine aktiven Mitarbeiter.</td></tr>';
         meldung("vgStapelMsg", "");
+        document.getElementById("vgDiagnose").style.display = "none";
         document.getElementById("vgBackdrop").style.display = "block";
         document.getElementById("vgStapelModal").style.display = "block";
       }).catch(function () {});
@@ -783,6 +788,63 @@
     meldung("vgHakenMsg", "");
     document.getElementById("vgBackdrop").style.display = "block";
     document.getElementById("vgHakenModal").style.display = "block";
+  }
+
+  /* ── Selbstauskunft: was sieht der Server im Lohn-Modul? ──────────
+     Bleibt der Vorschlag leer, gibt es genau drei mögliche Gründe. Statt
+     raten zu lassen, legt diese Auskunft alle drei nebeneinander. */
+  function diagnoseLaden() {
+    var kasten = document.getElementById("vgDiagnose");
+    kasten.innerHTML = '<div class="vg-leer">Wird geladen …</div>';
+    kasten.style.display = "";
+    fetch("/vorgaenge/lohn-diagnose", { headers: kopf() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { kasten.innerHTML = '<div class="vg-leer">Auskunft nicht verfügbar.</div>'; return; }
+        var teile = [];
+
+        teile.push('<div class="vg-diag-zeile"><b>Betrieb:</b> ' + esc(d.firma)
+          + ' · <b>Kalenderwoche:</b> ' + esc(d.kw) + ' ('
+          + esc(datumKurz(d.kw_von)) + ' – ' + esc(datumKurz(d.kw_bis)) + ')</div>');
+
+        if (!d.monate.length) {
+          teile.push('<div class="vg-warn">Im Lohn-Modul ist für diesen Betrieb noch '
+            + 'kein einziger Monat gespeichert. Öffne Lohn, trage die Werte ein und '
+            + 'klicke dort auf Speichern – erst dann kennt der Server die Zahlen.</div>');
+        } else {
+          teile.push('<div class="vg-diag-zeile"><b>Gespeicherte Lohn-Monate:</b></div>');
+          teile.push('<table class="vg-table vg-table-eng"><thead><tr>'
+            + '<th>Monat</th><th class="r">Fahrer</th><th>Wochen mit Beträgen</th></tr></thead><tbody>'
+            + d.monate.map(function (m) {
+                var voll = m.wochen.filter(function (w) { return w.treffer; });
+                return '<tr><td>' + esc(monatText(m.monat)) + '</td>'
+                  + '<td class="r">' + m.fahrer_anzahl + '</td>'
+                  + '<td>' + (voll.length
+                      ? voll.map(function (w) {
+                          return 'Woche ' + w.nr + ' (' + w.treffer + ' Fahrer, ' + esc(w.summe) + ' €)';
+                        }).join('<br>')
+                      : '<span class="vg-warn">keine Woche hat Werte unter „Offen"</span>') + '</td></tr>';
+              }).join("") + '</tbody></table>');
+        }
+
+        if (d.im_lohn_ohne_mitarbeiter.length) {
+          teile.push('<div class="vg-warn"><b>Im Lohn, aber nicht unter Mitarbeiter:</b> '
+            + esc(d.im_lohn_ohne_mitarbeiter.join(", "))
+            + ' – für diese Namen kann kein Vorgang entstehen. Lege sie unter '
+            + 'Mitarbeiter an oder schreibe sie im Lohn genau so wie dort.</div>');
+        }
+        if (d.mitarbeiter_ohne_lohn.length) {
+          teile.push('<div class="vg-diag-zeile"><b>Unter Mitarbeiter, aber nicht im Lohn:</b> '
+            + esc(d.mitarbeiter_ohne_lohn.join(", ")) + '</div>');
+        }
+        if (!d.im_lohn_ohne_mitarbeiter.length && d.monate.length) {
+          teile.push('<div class="vg-diag-zeile">Alle Lohn-Namen passen zu einem Mitarbeiter.</div>');
+        }
+
+        kasten.innerHTML = teile.join("");
+      }).catch(function () {
+        kasten.innerHTML = '<div class="vg-leer">Auskunft nicht verfügbar.</div>';
+      });
   }
 
   /* ── Bearbeiten und Stornieren ─────────────────────────────────── */
@@ -1117,6 +1179,11 @@
             document.getElementById("vgWocheBtn").onclick = function () { stapelOeffnen("", 0); };
             document.getElementById("vgStapelOk").onclick = stapelSenden;
             document.getElementById("vgStapelAbbruch").onclick = dialogeZu;
+            document.getElementById("vgWarumBtn").onclick = function () {
+              var k = document.getElementById("vgDiagnose");
+              if (k.style.display === "none") diagnoseLaden();
+              else k.style.display = "none";
+            };
             document.getElementById("vgKontoZurueck").onclick = function () {
               KONTO_ID = 0; kontenLaden();
             };

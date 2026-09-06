@@ -3543,6 +3543,27 @@ def _lohn_wochen_von(fahrer: dict) -> list:
     return [z for z in w if isinstance(z, dict)] if isinstance(w, list) else []
 
 
+_UMLAUTE = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
+            "á": "a", "à": "a", "â": "a", "é": "e", "è": "e", "ê": "e",
+            "í": "i", "ì": "i", "ó": "o", "ò": "o", "ô": "o",
+            "ú": "u", "ù": "u", "û": "u", "ç": "c", "ñ": "n",
+            "ş": "s", "ğ": "g", "ı": "i", "İ": "i", "ø": "o", "å": "a"}
+
+
+def _name_schluessel(name: str) -> str:
+    """Vergleichsform eines Fahrernamens.
+
+    Im Lohn-Modul tippt jemand „Yilmaz A.", unter Mitarbeiter steht
+    „Yilmaz A" oder „yilmaz  a." - gemeint ist dieselbe Person. Verglichen
+    wird deshalb ohne Punkte, ohne doppelte Leerzeichen, ohne Groß- und
+    Kleinschreibung und mit vereinheitlichten Umlauten.
+    """
+    text = (name or "").strip().lower()
+    text = "".join(_UMLAUTE.get(c, c) for c in text)
+    text = "".join(c if (c.isalnum() or c.isspace()) else " " for c in text)
+    return " ".join(text.split())
+
+
 def _lohn_treffer(fahrer_liste: list, index: int) -> int:
     """Wie viele Fahrer haben in dieser Woche überhaupt einen Betrag unter
     „Offen"? Daran erkennt man, ob eine Woche die gesuchte ist."""
@@ -3669,7 +3690,7 @@ def _lohn_wochenwerte(session: Session, firma_id: int, montag: date,
         if offen in (None, "", 0):
             continue
         try:
-            werte[name.lower()] = _cent(offen)
+            werte[_name_schluessel(name)] = _cent(offen)
         except HTTPException:
             continue
 
@@ -3708,8 +3729,8 @@ def wochenvorschlag(kw: str = "", lohn_monat: str = "", lohn_woche: int = 0,
 
     # Namen, die im Lohn stehen, aber unter Mitarbeiter fehlen. Ohne diesen
     # Hinweis sucht man lange, warum ein Fahrer keinen Vorschlag bekommt.
-    bekannt = {m.name.strip().lower() for m in fahrer}
-    ohne_mitarbeiter = [n for n in lohn["namen"] if n.strip().lower() not in bekannt]
+    bekannt = {_name_schluessel(m.name) for m in fahrer}
+    ohne_mitarbeiter = [n for n in lohn["namen"] if _name_schluessel(n) not in bekannt]
 
     return {
         "kw": woche,
@@ -3726,8 +3747,8 @@ def wochenvorschlag(kw: str = "", lohn_monat: str = "", lohn_woche: int = 0,
         "fahrer": [{
             "mitarbeiter_id": m.id,
             "name": m.name,
-            "vorschlag": _euro(lohn["werte"].get(m.name.strip().lower(), 0)),
-            "vorschlag_cent": lohn["werte"].get(m.name.strip().lower(), 0),
+            "vorschlag": _euro(lohn["werte"].get(_name_schluessel(m.name), 0)),
+            "vorschlag_cent": lohn["werte"].get(_name_schluessel(m.name), 0),
             "schon_angelegt": m.id in schon_da,
             "vorgang_id": schon_da.get(m.id),
         } for m in fahrer],
@@ -3744,6 +3765,64 @@ class StapelRequest(BaseModel):
     zeilen: list
     faellig_am: Optional[str] = None
     hinweis: Optional[str] = None
+
+
+@app.get("/vorgaenge/lohn-diagnose")
+def lohn_diagnose(current: User = Depends(get_wirk_user),
+                  session: Session = Depends(get_session)):
+    """Zeigt, was der Server im Lohn-Modul tatsächlich vorfindet.
+
+    Bleibt der Vorschlag leer, gibt es dafür genau drei Gründe: der Monat ist
+    nicht gespeichert, die Woche enthält keine Beträge, oder die Namen passen
+    nicht zu den Mitarbeitern. Statt raten zu lassen, legt diese Auskunft alle
+    drei offen.
+    """
+    firma = _vorgang_firma(current, session, schreibend=False)
+    leute = [m for m in session.exec(
+        select(Mitarbeiter).where(Mitarbeiter.firma_id == firma.id)).all()]
+    bekannt = {_name_schluessel(m.name): m.name for m in leute if m.aktiv}
+
+    monate = []
+    alle_lohn_namen = {}
+    for monat in sorted(_list_keys(session, firma.id, "lohn_monat"), reverse=True):
+        fahrer_liste = _lohn_daten(session, firma.id, monat)
+        anzahl = max([len(_lohn_wochen_von(f)) for f in fahrer_liste] or [0])
+        wochen = []
+        for i in range(anzahl):
+            summe = 0
+            for f in fahrer_liste:
+                w = _lohn_wochen_von(f)
+                if i < len(w) and w[i].get("offen") not in (None, "", 0):
+                    try:
+                        summe += _cent(w[i].get("offen"))
+                    except HTTPException:
+                        pass
+            wochen.append({"nr": i + 1, "treffer": _lohn_treffer(fahrer_liste, i),
+                           "summe": _euro(summe)})
+        namen = [str(f.get("name") or "").strip() for f in fahrer_liste]
+        namen = [n for n in namen if n]
+        for n in namen:
+            alle_lohn_namen[_name_schluessel(n)] = n
+        monate.append({"monat": monat, "fahrer_anzahl": len(fahrer_liste),
+                       "wochen_anzahl": anzahl, "wochen": wochen, "namen": namen})
+
+    heute = date.today()
+    montag = heute - timedelta(days=heute.weekday())
+    suche = _lohn_woche_suchen(session, firma.id, montag)
+
+    return {
+        "firma": firma.name,
+        "kw": _kw_text(montag),
+        "kw_von": montag.isoformat(),
+        "kw_bis": (montag + timedelta(days=6)).isoformat(),
+        "gewaehlt": suche["gewaehlt"],
+        "monate": monate,
+        "mitarbeiter": sorted([m.name for m in leute if m.aktiv], key=str.lower),
+        "im_lohn_ohne_mitarbeiter": sorted(
+            [n for k, n in alle_lohn_namen.items() if k not in bekannt], key=str.lower),
+        "mitarbeiter_ohne_lohn": sorted(
+            [n for k, n in bekannt.items() if k not in alle_lohn_namen], key=str.lower),
+    }
 
 
 @app.post("/vorgaenge/stapel")
