@@ -1334,6 +1334,7 @@ async def lifespan(app: FastAPI):
     _vorlagen_anlegen()
     _team_modul_nachtragen()
     _vorgaenge_modul_nachtragen()
+    _vorgangswochen_nachtragen()
     _superadmin_anlegen()
     print("FleetCompliance ist bereit.", flush=True)
     yield
@@ -1456,6 +1457,33 @@ def firma_profil(data: ProfilRequest, current: User = Depends(braucht("firmenpro
 
 
 # ─────────────── License-Status (Dashboard-kompatibel) ───────────────
+
+def _vorgangswochen_nachtragen():
+    """Traegt die Kalenderwoche bei Vorgaengen aus aelteren Versionen nach.
+
+    Frueher bekamen nur die per "Woche anlegen" erzeugten Vorgaenge eine
+    Woche. Von Hand angelegte hatten keine - sie fehlten dadurch in der
+    Wochenuebersicht, und beim naechsten Anlegen galt der Fahrer als noch
+    nicht dran, sodass eine zweite Forderung daneben entstand. Massgeblich
+    ist die Woche, in der der Vorgang faellig war.
+    """
+    with Session(engine) as s:
+        offene = [v for v in s.exec(select(Vorgang).where(
+            Vorgang.art == "fahrer_kassieren")).all() if not (v.periode or "")]
+        if not offene:
+            return
+        for v in offene:
+            tag = v.faellig_am or (v.erstellt_am.date() if v.erstellt_am else date.today())
+            v.periode = _kw_text(tag)
+            if v.titel and "(" not in v.titel:
+                v.titel = f"{v.titel} ({v.periode})"
+            s.add(v)
+        try:
+            s.commit()
+            print(f"Kalenderwoche bei {len(offene)} Vorgaengen nachgetragen.", flush=True)
+        except Exception:
+            s.rollback()
+
 
 def _vorgaenge_modul_nachtragen():
     """Schaltet die Vorgaenge bei allen Firmen frei, die sie noch nicht haben.
@@ -3940,13 +3968,27 @@ def lohn_diagnose(current: User = Depends(get_wirk_user),
         automatik.append({"name": m.name, "lohn_betrag": _euro(wert),
                           "vorhanden": da is not None, "grund": grund})
 
-    ohne_periode = len([v for v in session.exec(select(Vorgang).where(
+    alle_kassier = session.exec(select(Vorgang).where(
         Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren")).all()
-        if not (v.periode or "")])
+    ohne_periode = len([v for v in alle_kassier if not (v.periode or "")])
+    # Vorgaenge aus aelteren Versionen ohne Betrag: sie lassen sich nicht
+    # sinnvoll abhaken und blockieren die Woche.
+    ohne_betrag = [{"id": v.id, "titel": v.titel}
+                   for v in alle_kassier
+                   if v.status == "offen" and (v.betrag_soll_cent or 0) == 0]
 
+    rolle = current.rolle or ROLLE_INHABER
     return {
         "firma": firma.name,
         "version": APP_VERSION,
+        # Wer ist angemeldet, und was darf dieses Konto? Ohne diese Angabe
+        # bleibt "der Schalter fehlt bei mir" eine Ratefrage.
+        "benutzer": _wer(current),
+        "rolle": rolle,
+        "rollenname": ROLLEN_NAMEN.get(rolle, rolle),
+        "darf_einstellen": (rolle == ROLLE_INHABER or _is_superadmin(current)),
+        "vier_augen": bool(firma.vier_augen),
+        "ohne_betrag": ohne_betrag,
         "automatik": automatik,
         "ohne_kalenderwoche": ohne_periode,
         "kw": _kw_text(montag),

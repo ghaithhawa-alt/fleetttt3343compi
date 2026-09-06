@@ -961,6 +961,22 @@
           + ' · <b>Kalenderwoche:</b> ' + esc(d.kw) + ' ('
           + esc(datumKurz(d.kw_von)) + ' – ' + esc(datumKurz(d.kw_bis)) + ')</div>');
 
+        teile.push('<div class="vg-diag-zeile"><b>Angemeldet als:</b> ' + esc(d.benutzer || "?")
+          + ' (' + esc(d.rollenname || d.rolle || "?") + ')'
+          + ' · <b>Vier-Augen-Prinzip:</b> ' + (d.vier_augen ? "an" : "aus")
+          + ' · ' + (d.darf_einstellen
+              ? 'darf es umstellen'
+              : '<span class="vg-warn">darf es nicht umstellen – deshalb fehlt der Schalter. '
+                + 'Das kann nur der Inhaber des Betriebs.</span>')
+          + '</div>');
+
+        if (d.ohne_betrag && d.ohne_betrag.length) {
+          teile.push('<div class="vg-warn"><b>Ohne Betrag und damit nicht abhakbar:</b> '
+            + d.ohne_betrag.map(function (v) { return esc(v.titel); }).join(", ")
+            + ' – stammen aus einer älteren Version. Trag über „Bearbeiten“ '
+            + 'den Betrag nach oder storniere sie.</div>');
+        }
+
         /* Was hat die Automatik getan - und warum nicht mehr? */
         if (d.automatik && d.automatik.length) {
           teile.push('<div class="vg-diag-zeile"><b>Vorgänge dieser Woche:</b></div>');
