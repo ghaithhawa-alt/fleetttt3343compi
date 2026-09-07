@@ -16,7 +16,8 @@
     fahrtenbuch: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>',
     admin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
     settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
-    logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>'
+    logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+    sprache: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'
   };
   var LOGO = '<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
     + '<path d="M 128 16 L 232 56 L 232 144 Q 232 218 128 240 Q 24 218 24 144 L 24 56 Z" fill="#10b981"/>'
@@ -110,7 +111,11 @@
       });
       /* ── Gruppe KONTO (Admin, Einstellungen, Abmelden) ── */
       var kontoLabel = document.createElement("div");
-      kontoLabel.className = "fc-side-label";
+      /* Die feste Klasse ist wichtig: die Module haengen ihre Menuepunkte an
+         dieser Marke ein. Frueher suchten sie nach dem TEXT "Konto" - sobald
+         die Oberflaeche auf Arabisch stand, fanden sie nichts mehr und die
+         halbe Verwaltung fehlte im Menue. Eine Klasse uebersetzt sich nicht. */
+      kontoLabel.className = "fc-side-label fc-side-label-konto";
       kontoLabel.textContent = "Konto";
       side.appendChild(kontoLabel);
 
@@ -134,6 +139,38 @@
         else { alleSeitenAus(); var sp = document.getElementById("settingsPage"); if (sp) sp.style.display = "block"; }
       };
       side.appendChild(settingsBtn);
+
+      // Sprache umstellen
+      if (window.fcSprache) {
+        var sprBtn = document.createElement("button");
+        sprBtn.type = "button";
+        sprBtn.id = "fcSpracheBtn";
+        /* BEWUSST NICHT "fc-side-btn": die Module deuten jeden Klick auf einen
+           fc-side-btn als Modulwechsel und blenden dabei ihre eigene Seite aus
+           (siehe vorgaenge.js). Der Sprachknopf ist aber keine Navigation - man
+           will nach dem Umschalten genau da bleiben, wo man war. Die Klasse
+           fc-side-sprache sieht in shell.css identisch aus. */
+        sprBtn.className = "fc-side-sprache fc-side-konto";
+        /* Der Knopf zeigt immer die ANDERE Sprache an - so ist ohne Erklaerung
+           klar, wohin der Klick fuehrt. Und er steht in der jeweiligen Schrift,
+           damit ihn auch jemand findet, der die aktuelle Sprache nicht liest. */
+        var beschriften = function () {
+          var jetzt = window.fcSprache.aktuell();
+          var ziel = jetzt === "de" ? "ar" : "de";
+          sprBtn.innerHTML = ICONS.sprache +
+            '<span data-keine-uebersetzung>' + window.fcSprache.sprachen[ziel] + "</span>";
+          sprBtn.setAttribute("data-keine-uebersetzung", "1");
+          sprBtn.title = ziel === "ar" ? "التبديل إلى العربية" : "Auf Deutsch umstellen";
+        };
+        beschriften();
+        sprBtn.onclick = function () {
+          var jetzt = window.fcSprache.aktuell();
+          window.fcSprache.setzen(jetzt === "de" ? "ar" : "de", true);
+          beschriften();
+        };
+        document.addEventListener("fc:sprache", beschriften);
+        side.appendChild(sprBtn);
+      }
 
       // Abmelden
       var logoutBtn = document.createElement("button");

@@ -453,3 +453,30 @@ body.fc-shell .vg-version {
   margin-top: 14px; font-size: 11px; color: #52525b;
   font-family: 'JetBrains Mono', monospace;
 }
+
+/* ── Aufräumen für die Testphase ────────────────────────────────── */
+body.fc-shell .vg-aufraeumen { margin-top: 6px; }
+body.fc-shell .vg-aufraeumen-box {
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(239, 68, 68, .35);
+  border-radius: 12px;
+  background: rgba(239, 68, 68, .05);
+  max-width: 520px;
+}
+body.fc-shell .vg-aufraeumen-box p {
+  margin: 0 0 12px; font-size: 12.5px; color: #d4d4d8; line-height: 1.6;
+}
+body.fc-shell .vg-aufraeumen-box label {
+  display: block; font-size: 12px; color: #a1a1aa; margin-bottom: 6px;
+}
+body.fc-shell .vg-aufraeumen-box input {
+  width: 100%; height: 38px; background: #0d0d0d;
+  border: 1px solid rgba(255,255,255,.14); border-radius: 9px;
+  color: #fafafa; padding: 0 12px; font-size: 13px;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+body.fc-shell .vg-aufraeumen-box input:focus { outline: none; border-color: #ef4444; }
+body.fc-shell .vg-aufraeumen-foot {
+  display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px;
+}

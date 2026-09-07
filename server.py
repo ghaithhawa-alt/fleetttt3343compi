@@ -210,6 +210,8 @@ _NACHTRAEGLICHE_SPALTEN = [
     ("firma", "max_benutzer", "INTEGER DEFAULT 1"),
     ("vorgang", "periode", "VARCHAR DEFAULT ''"),
     ("vorgang", "nachfolger_von", "INTEGER DEFAULT 0"),
+    # Oberflaechensprache je Benutzer - damit die Wahl auch auf dem Telefon gilt.
+    ("user", "sprache", "VARCHAR DEFAULT 'de'"),
     # Vier-Augen-Prinzip: wer hat das Geld gemeldet, wer hat es bestaetigt.
     ("vorgang", "gemeldet_von", "INTEGER DEFAULT 0"),
     ("vorgang", "gemeldet_von_name", "VARCHAR DEFAULT ''"),
@@ -218,6 +220,9 @@ _NACHTRAEGLICHE_SPALTEN = [
     ("vorgang", "kasse_gezaehlt_cent", "INTEGER DEFAULT 0"),
     ("vorgang", "kasse_soll_cent", "INTEGER DEFAULT 0"),
     ("firma", "vier_augen", "BOOLEAN DEFAULT FALSE"),
+    # Bis zu diesem Tag wurden die Vorgaenge bewusst geleert - die Automatik
+    # legt fuer diese Wochen nichts mehr nach.
+    ("firma", "vorgaenge_leer_bis", "DATE"),
     # Auslagen des Fahrers oder Gutschriften, die gegen die Forderung laufen.
     ("vorgang", "abzug_cent", "INTEGER DEFAULT 0"),
     ("vorgang", "abzug_grund", "VARCHAR DEFAULT ''"),
@@ -273,6 +278,9 @@ class Firma(SQLModel, table=True):
     max_benutzer: int = 1                 # wie viele Personen in dieser Firma arbeiten duerfen
     # Vier-Augen-Prinzip beim Abkassieren: erst melden, dann bestaetigen.
     vier_augen: bool = False
+    # Wurde aufgeraeumt? Dann legt die Automatik fuer bereits laufende Wochen
+    # nichts mehr nach - sonst waere der Aufraeum-Knopf wirkungslos.
+    vorgaenge_leer_bis: Optional[date] = None
     notes: str = ""                       # interne Admin-Notizen (Kunde sieht sie nie)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -292,6 +300,7 @@ class User(SQLModel, table=True):
     mitarbeiter_id: Optional[int] = Field(  # nur bei der Rolle "fahrer" gesetzt
         default=None, foreign_key="mitarbeiter.id")
     letzte_anmeldung: Optional[datetime] = None
+    sprache: str = "de"                   # Oberflaechensprache: 'de' | 'ar'
 
 
 class DatenBlob(SQLModel, table=True):
@@ -1422,6 +1431,7 @@ def me(current: User = Depends(get_current_user), session: Session = Depends(get
     return {"id": current.id,
             "email": current.email, "firma": firma.name, "firma_id": current.firma_id,
             "superadmin": _is_superadmin(current),
+            "sprache": (current.sprache or "de"),
             # "rolle" kommt weiterhin aus der FIRMA (benutzer | admin) - der
             # Schluessel bleibt belegt, damit admin-app.js unveraendert laeuft.
             "rolle": "superadmin" if _is_superadmin(current) else (firma.rolle or "benutzer"),
@@ -1769,6 +1779,32 @@ def admin_plan_loeschen(data: PlanLoeschenRequest,
 class PasswortRequest(BaseModel):
     alt: str
     neu: str
+
+
+SPRACHEN = ("de", "ar")
+
+
+class SpracheRequest(BaseModel):
+    sprache: str = "de"
+
+
+@app.post("/me/sprache")
+def sprache_setzen(data: SpracheRequest,
+                   current: User = Depends(get_current_user),
+                   session: Session = Depends(get_session)):
+    """Merkt sich die Oberflaechensprache am Benutzer.
+
+    Der Browser merkt sie sich ohnehin selbst. Hier landet sie zusaetzlich,
+    damit ein Fahrer, der sich am Telefon anmeldet, nicht wieder Deutsch
+    vorfindet.
+    """
+    code = (data.sprache or "de").strip().lower()
+    if code not in SPRACHEN:
+        raise HTTPException(status_code=400,
+                            detail=f"Unbekannte Sprache: {data.sprache}")
+    current.sprache = code
+    session.add(current); session.commit()
+    return {"ok": True, "sprache": code}
 
 
 @app.post("/me/passwort")
@@ -2411,9 +2447,33 @@ def _seite(name: str) -> FileResponse:
 
 # ─────────────── Die einzelnen Seiten ───────────────
 
+def _sprach_einbau() -> str:
+    """Die Sprachschicht fuer eine oeffentliche Seite.
+
+    Absichtlich NICHT auf Impressum und Datenschutz: das sind Rechtstexte,
+    die in der Fassung gelten muessen, in der sie veroeffentlicht sind.
+    """
+    return (
+        f'<link rel="stylesheet" href="/app/i18n.css?v={_version("i18n.css")}">'
+        f'<script src="/app/i18n.js?v={_version("i18n.js")}"></script>'
+        f'<script src="/app/i18n-ar.js?v={_version("i18n-ar.js")}" defer></script>'
+        f'<script src="/app/i18n-ar-server.js?v={_version("i18n-ar-server.js")}" defer></script>'
+        f'<script src="/app/i18n-knopf.js?v={_version("i18n-knopf.js")}" defer></script>'
+    )
+
+
 @app.get("/")
 def seite_start():
-    return _seite("landing.html")
+    """Startseite mit Anmeldung - hier landet ein Fahrer zuerst, deshalb muss
+    sich die Sprache schon vor dem Anmelden umstellen lassen."""
+    datei = STATIC_DIR / "pages" / "landing.html"
+    html = datei.read_text(encoding="utf-8", errors="replace")
+    stelle = html.lower().find("</head>")
+    if stelle != -1:
+        html = html[:stelle] + _sprach_einbau() + html[stelle:]
+    else:
+        html = _sprach_einbau() + html
+    return HTMLResponse(html, headers=_NOCACHE)
 
 
 @app.get("/impressum")
@@ -2458,6 +2518,10 @@ def _dashboard_html() -> str:
     einbau = (
         f'<script src="/app/shim.js?v={_version("shim.js")}"></script>'
         '<link rel="stylesheet" href="/app/assets/fonts.css">'
+        # Die Sprachschicht muss VOR den Modulen stehen: sie richtet
+        # window.fcSprache ein, das die anderen Dateien danach benutzen.
+        f'<script src="/app/i18n.js?v={_version("i18n.js")}"></script>'
+        f'<link rel="stylesheet" href="/app/i18n.css?v={_version("i18n.css")}">'
         f'<link rel="stylesheet" href="/app/shell.css?v={_version("shell.css")}">'
         f'<link rel="stylesheet" href="/app/zn-redesign.css?v={_version("zn-redesign.css")}">'
         f'<link rel="stylesheet" href="/app/mitarbeiter.css?v={_version("mitarbeiter.css")}">'
@@ -2473,6 +2537,10 @@ def _dashboard_html() -> str:
         f'<script src="/app/team.js?v={_version("team.js")}" defer></script>'
         f'<link rel="stylesheet" href="/app/vorgaenge.css?v={_version("vorgaenge.css")}">'
         f'<script src="/app/vorgaenge.js?v={_version("vorgaenge.js")}" defer></script>'
+        # Die Wörterbücher zuletzt - sie melden sich bei der Sprachschicht an
+        # und stossen die Übersetzung an, wenn Arabisch eingestellt ist.
+        f'<script src="/app/i18n-ar.js?v={_version("i18n-ar.js")}" defer></script>'
+        f'<script src="/app/i18n-ar-server.js?v={_version("i18n-ar-server.js")}" defer></script>'
     )
     stelle = html.lower().find("<head>")
     if stelle != -1:
@@ -4142,14 +4210,23 @@ def _woche_sicherstellen(session: Session, firma: Firma):
     montag = heute - timedelta(days=heute.weekday())
     woche = _kw_text(montag)
 
+    # Wurde bewusst aufgeraeumt, wird fuer diese Woche nichts nachgelegt.
+    # Sonst stuende gleich nach dem Loeschen alles wieder da, und der Knopf
+    # waere wirkungslos.
+    if firma.vorgaenge_leer_bis and montag <= firma.vorgaenge_leer_bis:
+        return
+
     lohn = _lohn_wochenwerte(session, firma.id, montag)
     if not lohn["werte"]:
         return
 
+    # Ein STORNIERTER Vorgang zaehlt hier als erledigt: wer storniert, will
+    # ihn weghaben. Wuerde die Automatik ihn neu anlegen, waere Stornieren
+    # wirkungslos, solange im Lohn ein Betrag steht.
     schon_da, reste = set(), {}
     for v in session.exec(select(Vorgang).where(
             Vorgang.firma_id == firma.id, Vorgang.art == "fahrer_kassieren",
-            Vorgang.periode == woche, Vorgang.status != "storniert")).all():
+            Vorgang.periode == woche)).all():
         if v.nachfolger_von and v.status == "offen":
             reste[v.mitarbeiter_id] = v
         else:
@@ -4989,6 +5066,103 @@ def vorgang_aendern(vorgang_id: int, data: VorgangAendernRequest,
               " · ".join(aenderungen) + (f" — {grund}" if grund else ""))
     session.commit(); session.refresh(v)
     return _vorgang_dict(v)
+
+
+class AlleLoeschenRequest(BaseModel):
+    bestaetigung: str = ""      # der Firmenname, von Hand getippt
+
+
+@app.post("/vorgaenge/alle-loeschen")
+def vorgaenge_alle_loeschen(data: AlleLoeschenRequest,
+                            current: User = Depends(get_wirk_user),
+                            session: Session = Depends(get_session)):
+    """Löscht ALLE Vorgänge des Betriebs - gedacht fürs Ende der Testphase.
+
+    Mitarbeiter, Lohndaten und alles andere bleiben unangetastet. Damit das
+    kein Versehen sein kann, muss der Firmenname von Hand getippt werden -
+    ein Klick allein reicht nicht.
+    """
+    firma = _vorgang_firma(current, session)
+    if (current.rolle or ROLLE_INHABER) != ROLLE_INHABER and not _is_superadmin(current):
+        raise HTTPException(status_code=403,
+                            detail="Das darf nur der Inhaber des Betriebs.")
+    if (data.bestaetigung or "").strip() != firma.name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Zur Sicherheit bitte den Betriebsnamen genau so eintippen: {firma.name}")
+
+    alle = session.exec(select(Vorgang).where(Vorgang.firma_id == firma.id)).all()
+    ids = [v.id for v in alle]
+    for e in session.exec(select(VorgangEreignis).where(
+            VorgangEreignis.firma_id == firma.id)).all():
+        session.delete(e)
+    # Erst die Verlaufseintraege wirklich wegschreiben. Ohne dieses flush
+    # loescht PostgreSQL den Vorgang zuerst und bricht am Fremdschluessel ab -
+    # SQLite verzeiht das, die echte Datenbank nicht.
+    session.flush()
+    for v in alle:
+        session.delete(v)
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=409,
+                            detail="Löschen nicht möglich. Bitte noch einmal versuchen.")
+    # Damit die Automatik die gerade geleerte Woche nicht sofort neu befuellt.
+    heute = date.today()
+    firma.vorgaenge_leer_bis = heute + timedelta(days=6 - heute.weekday())
+    session.add(firma); session.commit()
+
+    print(f"Alle {len(ids)} Vorgaenge der Firma {firma.id} geloescht "
+          f"(von {_wer(current)}).", flush=True)
+    return {"ok": True, "geloescht": len(ids),
+            "ruhe_bis": firma.vorgaenge_leer_bis.isoformat()}
+
+
+@app.delete("/vorgaenge/{vorgang_id}")
+def vorgang_loeschen(vorgang_id: int,
+                     current: User = Depends(get_wirk_user),
+                     session: Session = Depends(get_session)):
+    """Löscht einen stornierten Vorgang endgültig.
+
+    Bewusst zweistufig: erst stornieren, dann löschen. Ein abgehakter Vorgang
+    belegt, dass Bargeld geflossen ist - der soll nicht mit zwei Klicks
+    spurlos verschwinden können. Und nur der Inhaber darf es.
+    """
+    firma = _vorgang_firma(current, session)
+    if (current.rolle or ROLLE_INHABER) != ROLLE_INHABER and not _is_superadmin(current):
+        raise HTTPException(status_code=403,
+                            detail="Endgültig löschen darf nur der Inhaber des Betriebs.")
+    v = session.get(Vorgang, vorgang_id)
+    if v is None or v.firma_id != firma.id:
+        raise HTTPException(status_code=404, detail="Vorgang nicht gefunden")
+    if v.status != "storniert":
+        raise HTTPException(
+            status_code=409,
+            detail="Nur stornierte Vorgänge lassen sich löschen. Storniere ihn zuerst – "
+                   "so bleibt nachvollziehbar, dass es ihn gab.")
+
+    folge = session.exec(select(Vorgang).where(
+        Vorgang.firma_id == firma.id, Vorgang.nachfolger_von == v.id,
+        Vorgang.status != "storniert")).first()
+    if folge is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Aus diesem Vorgang läuft noch etwas weiter („{folge.titel}“). "
+                   f"Kümmere dich zuerst darum.")
+
+    for e in session.exec(select(VorgangEreignis).where(
+            VorgangEreignis.vorgang_id == v.id)).all():
+        session.delete(e)
+    session.flush()      # Verlauf zuerst, sonst greift der Fremdschluessel
+    session.delete(v)
+    try:
+        session.commit()
+    except Exception as fehler:
+        session.rollback()
+        raise HTTPException(status_code=409,
+                            detail=f"Löschen nicht möglich: {type(fehler).__name__}")
+    return {"ok": True, "geloescht": vorgang_id}
 
 
 @app.post("/vorgaenge/{vorgang_id}/stornieren")

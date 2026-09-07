@@ -639,8 +639,12 @@
     btn.onclick = showPage;
     // Erst einsortieren, wenn die Verwaltung-Gruppe steht
     var ma = side.querySelector('[data-fc-target="mitarbeiter"]');
-    var konto = [].slice.call(side.querySelectorAll(".fc-side-label"))
-      .filter(function (l) { return l.textContent === "Konto"; })[0];
+    /* Anker fuer die eigenen Menuepunkte. Zuerst die feste Klasse, erst
+       danach der Text: der Text steht in der eingestellten Sprache und ist
+       auf Arabisch nicht "Konto" - danach zu suchen ginge dort schief. */
+    var konto = side.querySelector(".fc-side-label-konto")
+      || [].slice.call(side.querySelectorAll(".fc-side-label"))
+           .filter(function (l) { return l.textContent === "Konto"; })[0];
     if (!ma || !konto) return false;    // noch nicht fertig -> spaeter erneut
     side.insertBefore(btn, ma.nextSibling || konto);
     return true;

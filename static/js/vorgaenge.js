@@ -30,6 +30,7 @@
                 darf_einstellen: false, version: "" };
   var FAHRER = [];
   var OFFENES_DETAIL = null;
+  var DETAIL_STATUS = "";
 
   /* ── Seite ─────────────────────────────────────────────────────── */
   function buildPage() {
@@ -118,6 +119,21 @@
       +     '</div>'
       +     '<div id="vgErledigt" class="vg-liste vg-liste-blass"></div>'
       +     '<div class="vg-version" id="vgVersion"></div>'
+      +     '<div class="vg-aufraeumen" id="vgAufraeumen" style="display:none">'
+      +       '<button class="vg-link" id="vgAllesBtn" type="button">Alle Vorgänge löschen</button>'
+      +       '<div class="vg-aufraeumen-box" id="vgAllesBox" style="display:none">'
+      +         '<p>Löscht <b>alle</b> Vorgänge dieses Betriebs, auch die erledigten. '
+      +           'Mitarbeiter, Lohn und alles andere bleiben unberührt. '
+      +           'Das lässt sich nicht rückgängig machen.</p>'
+      +         '<label for="vgAllesName">Tippe zur Bestätigung den Namen des Betriebs:</label>'
+      +         '<input id="vgAllesName" type="text" autocomplete="off">'
+      +         '<div class="vg-msg" id="vgAllesMsg"></div>'
+      +         '<div class="vg-aufraeumen-foot">'
+      +           '<button class="vg-btn" id="vgAllesAbbruch" type="button">Abbrechen</button>'
+      +           '<button class="vg-btn vg-btn-rot" id="vgAllesOk" type="button">Alle löschen</button>'
+      +         '</div>'
+      +       '</div>'
+      +     '</div>'
       +   '</div>'
       +   '<div class="vg-rechts" id="vgNeuKarte">'
       +     '<div class="vg-card">'
@@ -270,6 +286,7 @@
       +   '</div>'
       +   '<div class="vg-modal-foot">'
       +     '<button class="vg-btn" id="vgDetailZu" type="button">Schließen</button>'
+      +     '<button class="vg-btn vg-btn-rot" id="vgLoeschen" type="button" style="display:none">Endgültig löschen</button>'
       +     '<button class="vg-btn" id="vgWiederOeffnen" type="button" style="display:none">Wieder öffnen</button>'
       +     '<button class="vg-btn vg-btn-green" id="vgKommentarOk" type="button">Hinweis speichern</button>'
       +   '</div>'
@@ -289,6 +306,7 @@
     document.getElementById("vgOkAbzug").addEventListener("input", okRestAktualisieren);
     document.getElementById("vgKommentarOk").onclick = kommentarSenden;
     document.getElementById("vgWiederOeffnen").onclick = wiederOeffnen;
+    document.getElementById("vgLoeschen").onclick = loeschenKlick;
     [].slice.call(document.querySelectorAll(".vg-wahl-btn")).forEach(function (b) {
       b.onclick = function () {
         document.querySelectorAll(".vg-wahl-btn").forEach(function (x) { x.classList.remove("on"); });
@@ -760,6 +778,8 @@
         b.onclick = function () { bestaetigenOeffnen(Number(b.dataset.ok)); };
       });
     });
+    var auf = document.getElementById("vgAufraeumen");
+    if (auf) auf.style.display = ZUSTAND.darf_einstellen ? "" : "none";
     var vv = document.getElementById("vgVersion");
     if (vv) vv.textContent = ZUSTAND.version ? "FleetCompliance " + ZUSTAND.version : "";
     sidebarZahl(ZUSTAND.anzahl_offen || 0);
@@ -1033,6 +1053,61 @@
       }).catch(function () {
         kasten.innerHTML = '<div class="vg-leer">Auskunft nicht verfügbar.</div>';
       });
+  }
+
+  /* ── Endgültig löschen ──────────────────────────────────────────
+     Zweistufig: der erste Klick fragt nach, der zweite löscht. Kein
+     zusätzlicher Dialog, aber auch kein Versehen. */
+  function loeschenKlick() {
+    var b = document.getElementById("vgLoeschen");
+    if (b.dataset.sicher !== "ja") {
+      b.dataset.sicher = "ja";
+      b.textContent = "Wirklich löschen? Nochmal klicken";
+      setTimeout(function () {
+        if (b.dataset.sicher === "ja") {
+          b.dataset.sicher = "";
+          b.textContent = "Endgültig löschen";
+        }
+      }, 5000);
+      return;
+    }
+    fetch("/vorgaenge/" + OFFENES_DETAIL, { method: "DELETE", headers: kopf() })
+      .then(function (r) {
+        if (!r.ok) return fehlertext(r).then(function (t) {
+          b.dataset.sicher = ""; b.textContent = "Endgültig löschen";
+          fcInfo("Nicht möglich", t);
+        });
+        dialogeZu();
+        nachAenderung();
+        fcInfo("Gelöscht", "Der Vorgang ist endgültig entfernt.", "info");
+      }).catch(function () {});
+  }
+
+  /* ── Alles löschen: nur fürs Ende der Testphase ─────────────────── */
+  function allesLoeschen() {
+    var name = (document.getElementById("vgAllesName").value || "").trim();
+    if (!name) {
+      meldung("vgAllesMsg", "Bitte den Namen des Betriebs eintippen.", "fehler");
+      return;
+    }
+    fetch("/vorgaenge/alle-loeschen", {
+      method: "POST", headers: kopf({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ bestaetigung: name })
+    }).then(function (r) {
+      if (!r.ok) return fehlertext(r).then(function (t) { meldung("vgAllesMsg", t, "fehler"); });
+      return r.json().then(function (d) {
+        document.getElementById("vgAllesBox").style.display = "none";
+        document.getElementById("vgAllesName").value = "";
+        meldung("vgAllesMsg", "");
+        nachAenderung();
+        fcInfo("Aufgeräumt", d.geloescht + (d.geloescht === 1 ? " Vorgang" : " Vorgänge")
+          + " gelöscht. Mitarbeiter und Lohndaten sind unberührt. "
+          + "Für diese Woche legt die App nichts mehr automatisch nach – "
+          + "ab nächstem Montag läuft es wieder normal. "
+          + "Nur die Tageskasse für heute erscheint gleich wieder – "
+          + "die gehört zum Kassenabgleich und wird jeden Tag neu angelegt.", "info");
+      });
+    }).catch(function () { meldung("vgAllesMsg", "Verbindung fehlgeschlagen.", "fehler"); });
   }
 
   /* ── Bestätigen: das zweite Augenpaar ───────────────────────────── */
@@ -1312,9 +1387,12 @@
       .then(function (v) {
         if (!v) return;
         document.getElementById("vgDetailTitel").textContent = v.titel;
+        var STAND = { offen: "offen", gemeldet: "gemeldet, wartet auf Bestätigung",
+                      storniert: "storniert" };
         document.getElementById("vgDetailSub").textContent =
           (v.betrag_soll_cent ? "Vorgesehen " + v.betrag_soll + " € · " : "")
-          + (v.status === "offen" ? "offen" : "erledigt (" + (v.ergebnis || "") + ")");
+          + (STAND[v.status] || "erledigt (" + (v.ergebnis || "") + ")");
+        DETAIL_STATUS = v.status;
         document.getElementById("vgVerlauf").innerHTML = (v.verlauf || []).map(function (e) {
           return '<div class="vg-schritt">'
             + '<div class="vg-schritt-kopf"><b>' + esc(TYP_TEXT[e.typ] || e.typ) + '</b>'
@@ -1327,7 +1405,14 @@
         document.getElementById("vgKommentarFeld").style.display = darf ? "" : "none";
         document.getElementById("vgKommentarOk").style.display = darf ? "" : "none";
         document.getElementById("vgWiederOeffnen").style.display =
-          (darf && v.status !== "offen") ? "" : "none";
+          (darf && v.status !== "offen" && v.status !== "storniert") ? "" : "none";
+        /* Endgültig löschen gibt es nur für stornierte, und nur für den
+           Inhaber. Erst stornieren, dann löschen - ein abgehakter Vorgang
+           belegt, dass Bargeld geflossen ist. */
+        var lo = document.getElementById("vgLoeschen");
+        lo.style.display = (ZUSTAND.darf_einstellen && v.status === "storniert") ? "" : "none";
+        lo.textContent = "Endgültig löschen";
+        lo.dataset.sicher = "";
         document.getElementById("vgKommentar").value = "";
         document.getElementById("vgBackdrop").style.display = "block";
         document.getElementById("vgDetailModal").style.display = "block";
@@ -1399,8 +1484,12 @@
     var side = document.querySelector(".fc-shell-side, aside.fc-side, .fc-side, [aria-label='Module']");
     if (!side) return false;
     if (side.querySelector('[data-fc-target="vorgaenge"]')) return true;
-    var kontoLabel = [].slice.call(side.querySelectorAll(".fc-side-label"))
-      .filter(function (l) { return l.textContent === "Konto"; })[0];
+    /* Anker fuer die eigenen Menuepunkte. Zuerst die feste Klasse, erst
+       danach der Text: der Text steht in der eingestellten Sprache und ist
+       auf Arabisch nicht "Konto" - danach zu suchen ginge dort schief. */
+    var kontoLabel = side.querySelector(".fc-side-label-konto")
+      || [].slice.call(side.querySelectorAll(".fc-side-label"))
+           .filter(function (l) { return l.textContent === "Konto"; })[0];
     if (!kontoLabel) return false;
 
     if (!side.querySelector(".fc-side-label-verwaltung")) {
@@ -1492,6 +1581,17 @@
               if (k.style.display === "none") diagnoseLaden();
               else k.style.display = "none";
             };
+            document.getElementById("vgAllesBtn").onclick = function () {
+              var box = document.getElementById("vgAllesBox");
+              box.style.display = box.style.display === "none" ? "" : "none";
+              meldung("vgAllesMsg", "");
+            };
+            document.getElementById("vgAllesAbbruch").onclick = function () {
+              document.getElementById("vgAllesBox").style.display = "none";
+              document.getElementById("vgAllesName").value = "";
+              meldung("vgAllesMsg", "");
+            };
+            document.getElementById("vgAllesOk").onclick = allesLoeschen;
             document.getElementById("vgVierAugenAn").onchange = function () {
               var an = document.getElementById("vgVierAugenAn").checked;
               fetch("/vorgaenge/einstellungen", {

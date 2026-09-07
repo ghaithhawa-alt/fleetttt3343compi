@@ -692,8 +692,12 @@
     btn.onclick = showPage;
     // Erst einsortieren, wenn die Seitenleiste fertig aufgebaut ist -
     // sonst landen die Module hinter der Verwaltung.
-    var kontoLabel = [].slice.call(side.querySelectorAll(".fc-side-label"))
-      .filter(function(l){return l.textContent==="Konto";})[0];
+    /* Anker fuer die eigenen Menuepunkte. Zuerst die feste Klasse, erst
+       danach der Text: der Text steht in der eingestellten Sprache und ist
+       auf Arabisch nicht "Konto" - danach zu suchen ginge dort schief. */
+    var kontoLabel = side.querySelector(".fc-side-label-konto")
+      || [].slice.call(side.querySelectorAll(".fc-side-label"))
+           .filter(function (l) { return l.textContent === "Konto"; })[0];
     if (!kontoLabel) return false;      // noch nicht fertig -> spaeter erneut versuchen
     var anker = kontoLabel;
     if (!side.querySelector(".fc-side-label-verwaltung")) {
