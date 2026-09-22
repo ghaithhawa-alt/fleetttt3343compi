@@ -5916,6 +5916,13 @@ function znRefresh(){
    neuen Monat als Basis. */
 function znOnMonthChange(){
   if(typeof ZN_STATE==="undefined")return;
+  /* Der Monat wurde von Hand gewaehlt - das merken wir uns.
+     Weiter unten in znRenderEmptyForm gibt es eine Automatik, die auf den
+     Monat mit den meisten Daten springt (und ohne Daten auf den heutigen).
+     Als Starthilfe ist das gut. Nach einer bewussten Auswahl ist es falsch:
+     wer einen leeren Monat anlegen will, landete sonst immer wieder im
+     aktuellen Monat und konnte den Berichtsmonat gar nicht wechseln. */
+  ZN_STATE.monatVomBenutzer=true;
   /* Wenn Erstellen-Formular sichtbar: neu rendern mit neuem Monat */
   var fe=document.getElementById("znFormErstellen");
   if(fe&&fe.style.display==="block"&&typeof znRenderEmptyForm==="function"){
@@ -12244,6 +12251,10 @@ function znProcessRows(rows,fname){
   if(stornCount>0)console.log("[ZN] "+stornCount+" stornierte Fahrten erkannt (werden bei Export entfernt)");
 
   ZN_STATE.raw=trips;
+  /* Frische Fahrten geladen: jetzt darf die Automatik wieder auf den Monat
+     springen, in dem die Daten liegen. Eine fruehere Handauswahl gilt nicht
+     mehr - sie bezog sich auf den vorherigen Datenstand. */
+  ZN_STATE.monatVomBenutzer=false;
   ZN_STATE.rawRowsAll=rows; /* Original-Excel-Zeilen für Export */
   ZN_STATE.rawFileName=fname; /* Dateiname für Export */
   /* Mai 2026: Default Tag-Verschiebung mit Schwelle 6h - kann im UI veraendert werden */
@@ -13406,8 +13417,10 @@ function znRenderEmptyForm(){
       month=now.getMonth()+1;
       document.getElementById("znMonth").value=year+"-"+pad(month);
     }
-  }else if(!year||!month||!hasDataForMonth){
-    /* Häufigsten Monat aus den Daten ermitteln */
+  }else if(!year||!month||(!hasDataForMonth&&!ZN_STATE.monatVomBenutzer)){
+    /* Häufigsten Monat aus den Daten ermitteln.
+       Nur noch, solange der Benutzer den Monat NICHT selbst gewaehlt hat -
+       eine bewusste Auswahl darf nie stillschweigend ueberschrieben werden. */
     var monthCounts={};
     Object.keys(data).forEach(function(k){
       var p=k.substring(0,7); /* "YYYY-MM" */

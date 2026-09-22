@@ -242,7 +242,25 @@ def _ensure_columns():
 
 
 def init_db():
-    SQLModel.metadata.create_all(engine)
+    """Tabellen anlegen und fehlende Spalten nachziehen.
+
+    Auf Railway laufen zwei Arbeitsprozesse. Bei einer noch leeren Datenbank
+    legen beide gleichzeitig dieselben Tabellen an - einer gewinnt, der andere
+    bekommt einen Schluesselkonflikt und der Start bricht ab. Deshalb ein
+    zweiter Versuch: dann sind die Tabellen bereits da und create_all hat
+    nichts mehr zu tun.
+    """
+    try:
+        SQLModel.metadata.create_all(engine)
+    except Exception as fehler:
+        print(f"Tabellen wurden parallel angelegt ({type(fehler).__name__}) - "
+              "zweiter Versuch.", flush=True)
+        try:
+            SQLModel.metadata.create_all(engine)
+        except Exception as zweiter:
+            # Jetzt ist es ein echtes Problem und darf nicht verschwiegen werden.
+            print(f"FEHLER beim Anlegen der Tabellen: {zweiter}", flush=True)
+            raise
     _ensure_columns()
 
 
