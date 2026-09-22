@@ -1,0 +1,72 @@
+/* Einstellungen-Seite - receiptscann-Stil, dunkel/gruen. Unter body.fc-shell. */
+body.fc-shell #settingsPage.set-page{ padding:24px 32px !important; max-width:none !important; margin:0 !important; }
+body.fc-shell .set-head h2{ font-size:20px;font-weight:700;color:#fafafa;margin:0 0 20px;letter-spacing:-.01em; }
+body.fc-shell .set-card{
+  background:#111;border:1px solid rgba(255,255,255,.07);border-radius:14px;
+  padding:22px 24px;margin-bottom:16px;
+}
+body.fc-shell .set-card-title{ font-size:14px;font-weight:600;color:#fafafa;margin-bottom:16px; }
+body.fc-shell .set-row{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 0;border-top:1px solid rgba(255,255,255,.05);
+}
+body.fc-shell .set-card-title + .set-row{ border-top:none;padding-top:0; }
+body.fc-shell .set-label{ font-size:13px;font-weight:600;color:#e4e4e7;margin-bottom:3px; }
+body.fc-shell .set-value{ font-size:12.5px;color:#71717a; }
+body.fc-shell .set-btn{
+  flex-shrink:0;background:transparent;border:1px solid rgba(255,255,255,.14);
+  border-radius:9px;padding:8px 16px;color:#e4e4e7;font-size:12.5px;font-weight:600;
+  cursor:pointer;font-family:'Inter',system-ui,sans-serif;text-decoration:none;display:inline-block;
+  transition:border-color .15s,color .15s,background .15s;
+}
+body.fc-shell .set-btn:hover{ border-color:#10b981;color:#10b981; }
+body.fc-shell .set-btn-green{ background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.3);color:#10b981; }
+body.fc-shell .set-btn-green:hover{ background:rgba(16,185,129,.2); }
+body.fc-shell .set-btn-red{ background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.3);color:#f87171; }
+body.fc-shell .set-btn-red:hover{ background:rgba(239,68,68,.18);border-color:#f87171;color:#f87171; }
+
+/* Passwort-Dialog */
+body.fc-shell .set-modal{ position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center; }
+body.fc-shell .set-modal-backdrop{ position:absolute;inset:0;background:rgba(0,0,0,.6); }
+body.fc-shell .set-modal-card{
+  position:relative;width:100%;max-width:420px;background:#141414;
+  border:1px solid rgba(255,255,255,.10);border-radius:16px;padding:24px;
+}
+body.fc-shell .set-modal-title{ font-size:16px;font-weight:600;color:#fafafa;margin-bottom:16px; }
+body.fc-shell .set-modal-card label{ display:block;font-size:11.5px;color:#a1a1aa;margin:12px 0 6px;font-weight:500; }
+body.fc-shell .set-modal-card input{
+  width:100%;height:40px;background:#0d0d0d;border:1px solid rgba(255,255,255,.10);
+  border-radius:9px;color:#fafafa;padding:0 12px;font-size:13.5px;font-family:'Inter',system-ui,sans-serif;
+  transition:border-color .15s,box-shadow .15s;
+}
+body.fc-shell .set-modal-card input:focus{ outline:none;border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.12); }
+body.fc-shell .set-modal-actions{ display:flex;justify-content:flex-end;gap:10px;margin-top:20px; }
+body.fc-shell .set-modal-msg{ font-size:12px;color:#f87171;margin-top:12px;min-height:16px; }
+body.fc-shell .set-modal-msg.ok{ color:#10b981; }
+
+/* Firmenprofil */
+body.fc-shell .set-hinweis{font-size:12px;color:#71717a;margin:-6px 0 14px}
+body.fc-shell .set-felder{display:flex;flex-direction:column;gap:14px;margin-bottom:4px}
+body.fc-shell .set-feld label{display:block;font-size:11.5px;color:#a1a1aa;margin-bottom:6px;font-weight:500}
+body.fc-shell .set-feld input{
+  width:100%;height:40px;background:#0d0d0d;border:1px solid rgba(255,255,255,.10);
+  border-radius:9px;color:#fafafa;padding:0 12px;font-size:13.5px;
+  font-family:'Inter',system-ui,sans-serif;transition:border-color .15s;
+}
+body.fc-shell .set-feld input:focus{outline:none;border-color:#10b981}
+body.fc-shell .set-feld input:disabled{opacity:.55;cursor:not-allowed}
+body.fc-shell .set-koord{font-size:11.5px;color:#71717a;font-family:'JetBrains Mono',monospace;margin-top:6px}
+body.fc-shell .set-warnung{
+  background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.28);border-radius:10px;
+  padding:11px 13px;margin-bottom:16px;font-size:12.5px;color:#fbbf24;line-height:1.5;
+}
+body.fc-shell .set-sperre{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);border-radius:10px;
+  padding:11px 13px;margin-bottom:16px;font-size:12.5px;color:#a1a1aa;line-height:1.5;
+}
+body.fc-shell .set-aktionen{display:flex;gap:10px;margin-top:14px}
+body.fc-shell .set-msg{font-size:12px;color:#71717a;margin-top:10px;min-height:16px}
+body.fc-shell .set-msg.ok{color:#10b981}
+body.fc-shell .set-msg.err{color:#f87171}
+body.fc-shell .set-koord-paar{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:600px){body.fc-shell .set-koord-paar{grid-template-columns:1fr}}

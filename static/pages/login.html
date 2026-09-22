@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FleetCompliance – Anmeldung</title>
+<link rel="stylesheet" href="/app/assets/fonts.css">
+<style>
+  :root{
+    --bg:#0a0a0a;--bg2:#111111;--bg3:#161616;
+    --border:rgba(255,255,255,.06);--border2:rgba(255,255,255,.10);
+    --text:#fafafa;--text2:#a1a1aa;--text3:#71717a;
+    --green:#10b981;--green2:#059669;--red:#ef4444;
+    --green-bg:rgba(16,185,129,.08);--green-border:rgba(16,185,129,.22);
+    --mono:'JetBrains Mono','SF Mono',monospace;
+    --sans:'Inter',system-ui,sans-serif;
+    --radius:8px;--radius-lg:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:var(--sans);background:var(--bg);color:var(--text);
+    line-height:1.6;-webkit-font-smoothing:antialiased;
+    min-height:100vh;position:relative;overflow-x:hidden;
+  }
+  body::before{
+    content:"";position:absolute;top:-25%;left:50%;transform:translateX(-50%);
+    width:900px;height:640px;pointer-events:none;
+    background:radial-gradient(circle at center,rgba(16,185,129,.10) 0%,transparent 62%);
+  }
+  .wrap{position:relative;max-width:420px;margin:0 auto;padding:10vh 24px 60px}
+  .brand{display:flex;justify-content:center;align-items:center;gap:11px;
+    font-weight:700;font-size:21px;letter-spacing:-.01em;margin-bottom:10px}
+  .brand svg{width:34px;height:34px;display:block}
+  .brand b{color:var(--green);font-weight:700}
+  .sub{text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--text3);
+    letter-spacing:.04em;text-transform:uppercase;margin-bottom:26px}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);
+    padding:26px;box-shadow:0 20px 50px rgba(0,0,0,.45)}
+  .tabs{display:flex;gap:8px;margin-bottom:18px}
+  .tabs button{flex:1;background:transparent;border:1px solid var(--border2);color:var(--text2);
+    border-radius:var(--radius);padding:9px;font-size:14px;font-weight:600;cursor:pointer;
+    font-family:var(--sans);transition:border-color .18s,color .18s,background .18s}
+  .tabs button:hover{border-color:var(--green);color:var(--green)}
+  .tabs button.active{background:var(--green);border-color:var(--green);color:#fff}
+  label{display:block;font-size:12.5px;color:var(--text2);margin:12px 0 6px;font-weight:500}
+  input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);
+    color:var(--text);padding:11px 13px;font-size:14.5px;font-family:var(--sans);
+    transition:border-color .18s}
+  input:focus{outline:none;border-color:var(--green)}
+  input::placeholder{color:var(--text3)}
+  .go{width:100%;margin-top:20px;background:var(--green);color:#fff;border:none;
+    border-radius:var(--radius);padding:12px;font-size:15px;font-weight:600;cursor:pointer;
+    font-family:var(--sans);transition:background .18s,transform .12s}
+  .go:hover{background:var(--green2)}
+  .go:active{transform:translateY(1px)}
+  .msg{font-size:13px;margin-top:14px;min-height:18px;color:var(--red)}
+  .trial{margin-top:16px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--text3)}
+  .trial b{color:var(--green);font-weight:600}
+  .foot{margin-top:26px;text-align:center;font-size:13px;color:var(--text3)}
+  .foot a{color:var(--text2);text-decoration:none;transition:color .15s}
+  .foot a:hover{color:var(--green)}
+  :focus-visible{outline:2px solid var(--green);outline-offset:3px;border-radius:4px}
+  [hidden]{display:none!important}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M 128 16 L 232 56 L 232 144 Q 232 218 128 240 Q 24 218 24 144 L 24 56 Z" fill="#10b981"/>
+      <g transform="translate(128, 140) scale(2.5)">
+        <path d="M -20 6 L -16 -8 Q -14 -12 -10 -12 L 10 -12 Q 14 -12 16 -8 L 20 6 L 20 12 Q 20 16 16 16 L 14 16 Q 14 18 12 18 L 8 18 Q 6 18 6 16 L -6 16 Q -6 18 -8 18 L -12 18 Q -14 18 -14 16 L -16 16 Q -20 16 -20 12 Z" fill="#0a0a0a"/>
+        <rect x="-13" y="-9" width="26" height="6" rx="1.5" fill="#10b981"/>
+        <circle cx="-11" cy="14" r="3" fill="#10b981"/>
+        <circle cx="11" cy="14" r="3" fill="#10b981"/>
+      </g>
+    </svg>
+    <span>Fleet<b>Compliance</b></span>
+  </div>
+  <p class="sub">Verwaltung für Mietwagen-Betriebe</p>
+
+  <div class="card">
+    <div class="tabs">
+      <button id="tab-login" class="active" onclick="tab('login')">Anmelden</button>
+      <button id="tab-reg" onclick="tab('reg')">Registrieren</button>
+    </div>
+    <div id="f-login">
+      <label for="li-email">E-Mail</label>
+      <input id="li-email" type="email" autocomplete="username" placeholder="name@firma.de">
+      <label for="li-pw">Passwort</label>
+      <input id="li-pw" type="password" autocomplete="current-password" placeholder="••••••••">
+      <button class="go" onclick="login()">Anmelden</button>
+    </div>
+    <div id="f-reg" hidden>
+      <label for="re-firma">Firmenname</label>
+      <input id="re-firma" type="text" placeholder="z.B. Muster Mietwagen GmbH">
+      <label for="re-email">E-Mail</label>
+      <input id="re-email" type="email" placeholder="name@firma.de">
+      <label for="re-pw">Passwort</label>
+      <input id="re-pw" type="password" autocomplete="new-password" placeholder="Mindestens 8 Zeichen">
+      <button class="go" onclick="register()">Konto anlegen</button>
+      <p class="trial"><b>30 Tage kostenlos</b> · keine Kreditkarte nötig</p>
+    </div>
+    <div id="msg" class="msg" role="alert"></div>
+  </div>
+
+  <p class="foot"><a href="https://fleetcompliance.de">fleetcompliance.de</a> · <a href="https://fleetcompliance.de/impressum.html">Impressum</a> · <a href="https://fleetcompliance.de/datenschutz.html">Datenschutz</a></p>
+</div>
+
+<script>
+var KEY="fc_token";
+var $=function(id){return document.getElementById(id);};
+function tab(t){
+  $('tab-login').classList.toggle('active',t==='login');
+  $('tab-reg').classList.toggle('active',t==='reg');
+  $('f-login').hidden=t!=='login'; $('f-reg').hidden=t!=='reg'; $('msg').textContent='';
+}
+async function api(path,opts){
+  var res=await fetch(path,opts);
+  var data=await res.json().catch(function(){return {};});
+  if(!res.ok) throw new Error(data.detail||('Fehler '+res.status));
+  return data;
+}
+async function login(){
+  try{
+    var d=await api('/login',{method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({username:$('li-email').value,password:$('li-pw').value})});
+    localStorage.setItem(KEY,d.access_token);
+    location.href=d.superadmin?'/admin':'/app/dashboard';
+  }catch(e){$('msg').textContent=e.message;}
+}
+async function register(){
+  try{
+    await api('/register',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({firma_name:$('re-firma').value,email:$('re-email').value,password:$('re-pw').value})});
+    var d=await api('/login',{method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({username:$('re-email').value,password:$('re-pw').value})});
+    localStorage.setItem(KEY,d.access_token);
+    location.href=d.superadmin?'/admin':'/app/dashboard';
+  }catch(e){$('msg').textContent=e.message;}
+}
+(async function(){
+  var t=localStorage.getItem(KEY);
+  if(!t) return;
+  try{
+    var res=await fetch('/me',{headers:{'Authorization':'Bearer '+t}});
+    if(res.ok){var me=await res.json();location.href=me.superadmin?'/admin':'/app/dashboard';}
+    else localStorage.removeItem(KEY);
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
