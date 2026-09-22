@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<!--
+  DATENSCHUTZERKLAERUNG - Platzhalter-Version (schlank)
+
+  Diese Version passt zum AKTUELLEN Stand: reine Info-Website, kein Konto,
+  kein Formular, keine Cloud-Speicherung von Fahrdaten. Wenn Phase 3 (Cloud/
+  Web-App) live geht, MUSS diese Erklaerung deutlich erweitert werden
+  (Konto-Daten, Fahrdaten, Auftragsverarbeitung, Loeschfristen, etc.) -
+  die entsprechenden Stellen sind unten markiert.
+
+  Platzhalter sind gelb markiert (Klasse "ph") und in eckigen Klammern.
+
+  OFFENER TECHNISCHER PUNKT, der den Datenschutz betrifft:
+  - Hosting (z.B. Netlify) ggf. mit Servern ausserhalb der EU -> Drittland-
+    Uebermittlung pruefen, AV-Vertrag abschliessen.
+
+  ERLEDIGT: Schriften werden jetzt selbst gehostet (Ordner /fonts/), nicht
+  mehr von Google geladen. Abschnitt 3 ist entsprechend angepasst.
+
+  Ich bin kein Anwalt. Fertigen Text ueber e-recht24 oder Anwalt gegenpruefen.
+-->
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datenschutzerklärung – FleetCompliance</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/app/assets/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/app/assets/favicon-32.png">
+<link rel="icon" href="/app/assets/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/app/assets/apple-touch-icon.png">
+<link rel="stylesheet" href="/app/assets/fonts.css">
+<style>
+  :root {
+    --bg: #0a0a0a; --bg2: #111111; --border: rgba(255,255,255,0.06); --border2: rgba(255,255,255,0.10);
+    --text: #fafafa; --text2: #a1a1aa; --text3: #71717a;
+    --amber: #f59e0b; --accent: #10b981; --accent-hover: #059669;
+    --mono: 'JetBrains Mono','SF Mono',monospace; --sans: 'Inter',system-ui,sans-serif;
+    --radius: 8px; --radius-lg: 12px; --maxw: 1120px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; padding: 12px 22px; border-radius: var(--radius); border: 1px solid var(--border2); background: transparent; color: var(--text); transition: border-color .18s, color .18s; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  header { position: sticky; top: 0; z-index: 50; background: rgba(10,10,10,.82); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 66px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -.01em; }
+  .logo svg { width: 30px; height: 30px; display: block; }
+  .logo-accent { color: var(--accent); }
+  .nav-links { display: flex; gap: 28px; }
+  .nav-links a { color: var(--text2); font-size: 15px; font-weight: 500; transition: color .15s; }
+  .nav-links a:hover { color: var(--text); }
+
+  main { padding: 72px 0 40px; }
+  .legal { max-width: 760px; }
+  .legal h1 { font-size: clamp(30px,4vw,42px); font-weight: 800; letter-spacing: -.02em; margin-bottom: 10px; }
+  .legal .sub { color: var(--text3); font-family: var(--mono); font-size: 14px; margin-bottom: 44px; }
+  .legal h2 { font-size: 20px; font-weight: 700; margin: 38px 0 12px; letter-spacing: -.01em; }
+  .legal h2 .num { font-family: var(--mono); color: var(--accent); font-size: 15px; margin-right: 10px; }
+  .legal p { color: var(--text2); margin-bottom: 12px; }
+  .legal ul { color: var(--text2); margin: 0 0 12px 20px; }
+  .legal li { margin-bottom: 6px; }
+  .legal address { font-style: normal; color: var(--text2); margin-bottom: 12px; }
+  .ph { font-family: var(--mono); font-size: .92em; color: var(--amber); background: rgba(245,158,11,.10); border: 1px solid rgba(245,158,11,.22); border-radius: 5px; padding: 1px 7px; }
+  .note { border-left: 2px solid var(--accent); background: rgba(16,185,129,.05); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 20px 0; color: var(--text2); font-size: 14.5px; }
+  .warn { border-left: 2px solid var(--amber); background: rgba(245,158,11,.06); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 20px 0; color: var(--text2); font-size: 14.5px; }
+  .back { margin-top: 48px; }
+
+  footer { border-top: 1px solid var(--border); padding: 40px 0 56px; margin-top: 40px; }
+  .foot-grid { display: flex; justify-content: space-between; align-items: center; gap: 30px; flex-wrap: wrap; }
+  .foot-links { display: flex; gap: 24px; flex-wrap: wrap; }
+  .foot-links a { color: var(--text2); font-size: 14.5px; }
+  .foot-links a:hover { color: var(--text); }
+
+  @media (max-width: 720px) { .nav-links { display: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="/" aria-label="FleetCompliance Startseite">
+      <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M 128 16 L 232 56 L 232 144 Q 232 218 128 240 Q 24 218 24 144 L 24 56 Z" fill="#10b981"/>
+        <g transform="translate(128, 140) scale(2.5)">
+          <path d="M -20 6 L -16 -8 Q -14 -12 -10 -12 L 10 -12 Q 14 -12 16 -8 L 20 6 L 20 12 Q 20 16 16 16 L 14 16 Q 14 18 12 18 L 8 18 Q 6 18 6 16 L -6 16 Q -6 18 -8 18 L -12 18 Q -14 18 -14 16 L -16 16 Q -20 16 -20 12 Z" fill="#0a0a0a"/>
+          <rect x="-13" y="-9" width="26" height="6" rx="1.5" fill="#10b981"/>
+          <circle cx="-11" cy="14" r="3" fill="#10b981"/>
+          <circle cx="11" cy="14" r="3" fill="#10b981"/>
+        </g>
+      </svg>
+      <span>Fleet<span class="logo-accent">Compliance</span></span>
+    </a>
+    <nav class="nav-links">
+      <a href="/#funktionen">Funktionen</a>
+      <a href="/#preise">Preise</a>
+      <a href="/#kontakt">Kontakt</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap legal">
+    <h1>Datenschutzerklärung</h1>
+    <p class="sub">Stand: <span class="ph">[DATUM eintragen]</span> · gilt für die Website fleetcompliance.de</p>
+
+    <div class="warn">Diese Erklärung beschreibt den <strong>aktuellen</strong> Zustand: eine reine Informations-Website ohne Nutzerkonto, ohne Kontaktformular und ohne Speicherung von Fahr- oder Firmendaten. Sobald die Web-App mit Login und Cloud-Speicherung startet, muss diese Erklärung erweitert werden. Die betroffenen Stellen sind unten mit „später ergänzen“ markiert.</div>
+
+    <h2><span class="num">1.</span>Verantwortlicher</h2>
+    <address>
+      <span class="ph">[NAME / FIRMA]</span><br>
+      <span class="ph">[STRASSE UND HAUSNUMMER]</span><br>
+      <span class="ph">[PLZ ORT]</span><br>
+      E-Mail: Fleetcompliance@gmail.com
+    </address>
+
+    <h2><span class="num">2.</span>Verarbeitung beim Besuch der Website (Server-Logfiles)</h2>
+    <p>Beim Aufruf der Website werden durch den Hosting-Anbieter automatisch technische Daten in Server-Logfiles verarbeitet: IP-Adresse, Datum und Uhrzeit des Zugriffs, aufgerufene Seite, übertragene Datenmenge, Browsertyp und Betriebssystem. Diese Daten sind für den technischen Betrieb und die Sicherheit der Seite erforderlich.</p>
+    <p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem sicheren, störungsfreien Betrieb).</p>
+    <p>Hosting-Anbieter: <span class="ph">[HOSTER, z.B. Netlify]</span>.</p>
+    <div class="warn">Falls dein Hoster (z.B. Netlify) Server außerhalb der EU betreibt, findet eine Datenübermittlung in ein Drittland statt. Das ist hier zu benennen, die Grundlage anzugeben (z.B. EU-Standardvertragsklauseln) und ein Auftragsverarbeitungsvertrag mit dem Hoster abzuschließen. Bitte prüfen.</div>
+
+    <h2><span class="num">3.</span>Schriftarten</h2>
+    <p>Diese Website verwendet die Schriftarten „Inter“ und „JetBrains Mono“. Sie werden ausschließlich von unserem eigenen Server bzw. dem unseres Hosting-Anbieters geladen und nicht von Servern Dritter (insbesondere nicht von Google). Beim Laden der Schriften werden daher keine personenbezogenen Daten an Dritte übertragen.</p>
+
+    <h2><span class="num">4.</span>Kontaktaufnahme per E-Mail</h2>
+    <p>Wenn du uns per E-Mail kontaktierst (z.B. über den „E-Mail schreiben“-Button), verarbeiten wir die von dir mitgeteilten Angaben (z.B. Name, E-Mail-Adresse, Inhalt der Nachricht), um deine Anfrage zu bearbeiten.</p>
+    <p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Anbahnung/Erfüllung eines Vertrags) bzw. lit. f DSGVO (berechtigtes Interesse an der Bearbeitung der Anfrage). Die Daten werden gelöscht, sobald sie für den Zweck nicht mehr erforderlich sind und keine gesetzlichen Aufbewahrungspflichten entgegenstehen.</p>
+
+    <h2><span class="num">5.</span>Nutzerkonto und Fahrdaten <span class="ph">[später ergänzen]</span></h2>
+    <p>Dieser Abschnitt wird ergänzt, sobald die Web-App mit Login live geht. Dann sind unter anderem zu beschreiben: Kontodaten, hochgeladene Fahr- und Firmendaten, Zweck und Rechtsgrundlage der Verarbeitung, Speicherort, Löschfristen sowie die Auftragsverarbeitung durch Cloud-Dienstleister.</p>
+    <div class="note">Wichtig: Fahrdaten sind persönliche Bewegungsprofile und damit besonders sensibel. Vor dem Start der Cloud-Version sollte dieser Teil sorgfältig (idealerweise mit fachlicher Prüfung) ausgearbeitet werden.</div>
+
+    <h2><span class="num">6.</span>Deine Rechte</h2>
+    <p>Du hast im Rahmen der gesetzlichen Vorgaben das Recht auf:</p>
+    <ul>
+      <li>Auskunft über deine verarbeiteten Daten (Art. 15 DSGVO)</li>
+      <li>Berichtigung unrichtiger Daten (Art. 16 DSGVO)</li>
+      <li>Löschung (Art. 17 DSGVO)</li>
+      <li>Einschränkung der Verarbeitung (Art. 18 DSGVO)</li>
+      <li>Datenübertragbarkeit (Art. 20 DSGVO)</li>
+      <li>Widerspruch gegen die Verarbeitung (Art. 21 DSGVO)</li>
+    </ul>
+    <p>Zur Ausübung genügt eine E-Mail an Fleetcompliance@gmail.com.</p>
+
+    <h2><span class="num">7.</span>Beschwerderecht bei der Aufsichtsbehörde</h2>
+    <p>Du hast das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren. Zuständig ist in der Regel die Behörde deines Wohnsitzes oder unseres Sitzes.</p>
+    <p>Zuständige Aufsichtsbehörde für uns: <span class="ph">[z.B. Landesbeauftragte für Datenschutz und Informationsfreiheit Nordrhein-Westfalen (LDI NRW) – an deinen Sitz anpassen]</span>.</p>
+
+    <div class="note">Diese Datenschutzerklärung ist eine Vorlage und ersetzt keine Rechtsberatung. Lass den fertigen Text idealerweise über e-recht24 oder einen Anwalt gegenprüfen – besonders vor dem Start der Cloud-Version.</div>
+
+    <div class="back"><a class="btn" href="/">← Zurück zur Startseite</a></div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap foot-grid">
+    <a class="logo" href="/">
+      <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M 128 16 L 232 56 L 232 144 Q 232 218 128 240 Q 24 218 24 144 L 24 56 Z" fill="#10b981"/>
+        <g transform="translate(128, 140) scale(2.5)">
+          <path d="M -20 6 L -16 -8 Q -14 -12 -10 -12 L 10 -12 Q 14 -12 16 -8 L 20 6 L 20 12 Q 20 16 16 16 L 14 16 Q 14 18 12 18 L 8 18 Q 6 18 6 16 L -6 16 Q -6 18 -8 18 L -12 18 Q -14 18 -14 16 L -16 16 Q -20 16 -20 12 Z" fill="#0a0a0a"/>
+          <rect x="-13" y="-9" width="26" height="6" rx="1.5" fill="#10b981"/>
+          <circle cx="-11" cy="14" r="3" fill="#10b981"/>
+          <circle cx="11" cy="14" r="3" fill="#10b981"/>
+        </g>
+      </svg>
+      <span>Fleet<span class="logo-accent">Compliance</span></span>
+    </a>
+    <nav class="foot-links">
+      <a href="/">Startseite</a>
+      <a href="/impressum">Impressum</a>
+      <a href="/datenschutz">Datenschutz</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>

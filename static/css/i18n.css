@@ -1,0 +1,85 @@
+/* i18n.css — Darstellung der arabischen Oberfläche
+ *
+ * Bewusst zurückhaltend: das Layout bleibt von links nach rechts, wie
+ * abgestimmt. Hier wird nur dafür gesorgt, dass die arabische Schrift sauber
+ * aussieht — sie hat höhere Buchstaben und braucht etwas mehr Zeilenabstand,
+ * sonst kleben die Zeilen aneinander.
+ */
+
+:root[data-fc-sprache="ar"] {
+  /* Systemschriften, die Arabisch wirklich können. Zuerst die des jeweiligen
+     Betriebssystems, dann die üblichen Weboptionen, zuletzt die bisherige
+     Schrift für alles Lateinische (Beträge, Kennzeichen, Eigennamen). */
+  --fc-schrift-ar: "Noto Sans Arabic", "Geeza Pro", "Segoe UI", Tahoma,
+                   "Arabic Typesetting", "Traditional Arabic", "Dubai",
+                   system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+:root[data-fc-sprache="ar"] body,
+:root[data-fc-sprache="ar"] button,
+:root[data-fc-sprache="ar"] input,
+:root[data-fc-sprache="ar"] select,
+:root[data-fc-sprache="ar"] textarea,
+:root[data-fc-sprache="ar"] table {
+  font-family: var(--fc-schrift-ar);
+}
+
+/* Arabische Buchstaben ragen weiter nach oben und unten. Ohne etwas mehr
+   Luft berühren sich die Zeilen in engen Tabellen. */
+:root[data-fc-sprache="ar"] body { line-height: 1.75; }
+:root[data-fc-sprache="ar"] td,
+:root[data-fc-sprache="ar"] th,
+:root[data-fc-sprache="ar"] .fc-side-btn,
+:root[data-fc-sprache="ar"] button { line-height: 1.6; }
+
+/* Arabisch trägt keine Versalien. Ein "text-transform: uppercase" aus dem
+   deutschen Entwurf bleibt wirkungslos, verzerrt aber die Laufweite —
+   deshalb hier abschalten. */
+:root[data-fc-sprache="ar"] th,
+:root[data-fc-sprache="ar"] .vg-kachel-titel,
+:root[data-fc-sprache="ar"] .fc-side-label,
+:root[data-fc-sprache="ar"] [style*="uppercase"] {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Beträge, Kennzeichen und Datumsangaben bleiben lateinisch und sollen
+   nicht in den arabischen Textfluss hineingezogen werden. */
+:root[data-fc-sprache="ar"] .vg-geld,
+:root[data-fc-sprache="ar"] .vg-betrag,
+:root[data-fc-sprache="ar"] input[inputmode="decimal"],
+:root[data-fc-sprache="ar"] input[type="number"],
+:root[data-fc-sprache="ar"] input[type="date"],
+:root[data-fc-sprache="ar"] input[type="email"],
+:root[data-fc-sprache="ar"] code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Der Sprachknopf zeigt immer die andere Sprache. Der arabische Name soll
+   dort in arabischer Schrift stehen, auch wenn die App gerade deutsch ist. */
+#fcSpracheBtn span { font-family: var(--fc-schrift-ar); font-size: 13.5px; }
+
+/* Etwas längere Wörter im Arabischen dürfen die Seitenleiste nicht sprengen. */
+:root[data-fc-sprache="ar"] .fc-side-btn span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Umschalter auf den öffentlichen Seiten ──────────────────────
+   Dort gibt es keine Seitenleiste. Der Knopf bleibt klein und oben rechts,
+   damit er die Anmeldekarte nicht stört. */
+#fcSprachKnopf {
+  position: fixed; top: 14px; right: 16px; z-index: 9000;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  font-family: var(--fc-schrift-ar, system-ui), system-ui, sans-serif;
+  font-size: 13.5px; font-weight: 600; line-height: 1.4;
+  background: rgba(17, 17, 17, .88); color: #fafafa;
+  border: 1px solid rgba(255, 255, 255, .16);
+  backdrop-filter: blur(8px);
+  transition: border-color .15s, color .15s;
+}
+#fcSprachKnopf:hover { border-color: #10b981; color: #10b981; }
+@media (max-width: 600px) {
+  #fcSprachKnopf { top: 10px; right: 10px; padding: 6px 12px; font-size: 13px; }
+}
