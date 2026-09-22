@@ -545,16 +545,12 @@
     // Bearbeiten: Betrieb des Mitarbeiters, sonst der gerade gewaehlte
     var ziel = (m && m.firma_id) ? m.firma_id : (AKTUELLE_FIRMA || FIRMEN[0].id);
     sel.value = String(ziel);
-    /* Das Feld bleibt auch beim Bearbeiten offen. Es ist als Korrektur
-       gedacht: wer jemanden im falschen Betrieb findet, soll ihn zurecht-
-       rücken können, ohne ihn neu anzulegen. Der Server lässt den Wechsel
-       nur zu, solange noch keine Vorgänge und kein Fahrerzugang daran
-       hängen - sonst kommt eine Meldung, die genau das erklärt. */
-    sel.disabled = false;
+    // Beim Bearbeiten nicht verschieben - das waere ein Umzug mit Nebenwirkungen
+    sel.disabled = !!m;
     var hinweis = wrap.querySelector(".ma-feld-hinweis");
     if (hinweis) {
       hinweis.textContent = m
-        ? "Falscher Betrieb? Hier umstellen – solange noch keine Vorgänge daranhängen."
+        ? "Der Betrieb kann nachträglich nicht gewechselt werden."
         : "Der Mitarbeiter gehört zu diesem Betrieb.";
     }
   }

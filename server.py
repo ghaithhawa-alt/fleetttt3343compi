@@ -551,37 +551,11 @@ def ist_superadmin(user: User) -> bool:
     return bool(SUPERADMIN_EMAIL) and user.email.lower() == SUPERADMIN_EMAIL.lower()
 
 
-def konto_firma_id(user: User, session: Session) -> int:
-    """Die Firma, zu der das angemeldete Konto WIRKLICH gehoert.
-
-    Ist gerade ein Mandant geoeffnet, zeigt user.firma_id auf diesen Betrieb -
-    get_wirk_user haengt den X-Mandant-Kopf genau dafuer um. Fuer Rechtefragen
-    ist das aber die falsche Firma: der geoeffnete Betrieb hat in aller Regel
-    eine Einzellizenz. Wer danach fragte, ob "diese Firma" mehrere Betriebe
-    fuehren darf, bekam ein Nein - und zwar still. Die Folge war, dass ein
-    Mitarbeiter im zuletzt geoeffneten Betrieb landete statt im gewaehlten.
-
-    Deshalb hier immer das echte Konto aus der Datenbank lesen. Das ist ein
-    Zugriff ueber den Primaerschluessel, also billig, und er beantwortet genau
-    die richtige Frage: "Wer bist du angemeldet?" statt "Wo schaust du gerade
-    hin?".
-    """
-    if user.id is not None:
-        echt = session.get(User, user.id)
-        if echt is not None:
-            return echt.firma_id
-    return user.firma_id
-
-
 def darf_mandanten_fuehren(user: User, session: Session) -> bool:
-    """Mehrere Firmen betreuen darf, wer die Lizenzart "gruppe" hat.
-
-    Gefragt wird nach dem eigenen Konto, nicht nach dem gerade geoeffneten
-    Betrieb - sonst verliert man das Recht, sobald man einmal umschaltet.
-    """
+    """Mehrere Firmen betreuen darf, wer die Lizenzart "gruppe" hat."""
     if ist_superadmin(user):
         return True
-    firma = session.get(Firma, konto_firma_id(user, session))
+    firma = session.get(Firma, user.firma_id)
     return bool(firma and (firma.lizenzart or "single") == "gruppe")
 
 
@@ -591,14 +565,8 @@ def darf_firma_bearbeiten(user: User, session: Session, firma_id: int) -> bool:
         return True
     if ist_superadmin(user):
         return session.get(Firma, firma_id) is not None
-    heim = konto_firma_id(user, session)
-    if firma_id == heim:
-        return True
-    # Die Zuordnungen haengen am eigenen Konto. Waehrend ein Mandant geoeffnet
-    # ist, darf hier nicht nach dessen Zuordnungen gesucht werden - der fuehrt
-    # keine, und der Wechsel zu einem Geschwisterbetrieb schlaegt fehl.
     zuordnung = session.exec(
-        select(Mandant).where(Mandant.inhaber_firma_id == heim,
+        select(Mandant).where(Mandant.inhaber_firma_id == user.firma_id,
                               Mandant.mandant_firma_id == firma_id)
     ).first()
     return zuordnung is not None
@@ -2657,27 +2625,14 @@ def _datum_oder_none(text):
         return None
 
 
-def _ziel_firma(current: User, session: Session, firma_id: Optional[int],
-                ausdruecklich: bool = False) -> int:
-    """Eigene Firma - oder ein zugeordneter Mandant (Superadmin: jede Firma).
-
-    ausdruecklich=True bedeutet: der Betrieb stand in der Anfrage selbst, der
-    Benutzer hat ihn also bewusst ausgewaehlt. Dann darf hier NICHTS still auf
-    eine andere Firma ausweichen - lieber eine klare Fehlermeldung als ein
-    Mitarbeiter, der ungefragt im falschen Betrieb landet. Genau das ist
-    passiert, solange dieser Fall nicht unterschieden wurde.
-    """
+def _ziel_firma(current: User, session: Session, firma_id: Optional[int]) -> int:
+    """Eigene Firma - oder ein zugeordneter Mandant (Superadmin: jede Firma)."""
     if firma_id is None or firma_id == current.firma_id:
         return current.firma_id
     # Gleiche Nachsicht wie in get_wirk_user: Wer gar keine Mandanten fuehren
     # darf, hat diese Firma nie selbst gewaehlt - der Wert kommt aus einem
     # alten X-Mandant im Browser. Dann still die eigene Firma nehmen.
     if not darf_mandanten_fuehren(current, session):
-        if ausdruecklich:
-            raise HTTPException(
-                status_code=403,
-                detail="Dein Konto darf nur den eigenen Betrieb führen. "
-                       "Für mehrere Betriebe braucht es eine Gruppenlizenz.")
         return current.firma_id
     if not darf_firma_bearbeiten(current, session, firma_id):
         raise HTTPException(status_code=403, detail="Keine Berechtigung fuer diese Firma")
@@ -3190,21 +3145,15 @@ def admin_profil_freigeben(data: ProfilFreigabeRequest,
 
 # ───────────────────────── Mandanten (mehrere Firmen) ─────────────────────────
 def _mandanten_liste(current: User, session: Session):
-    """Eigene Firma zuerst, danach die zugeordneten Mandanten.
-
-    Immer vom eigenen Konto aus gesehen. Waere hier der gerade geoeffnete
-    Betrieb gemeint, schrumpfte die Liste beim Umschalten auf einen einzigen
-    Eintrag - und man kaeme nicht mehr zurueck.
-    """
-    heim = konto_firma_id(current, session)
-    eigene = session.get(Firma, heim)
+    """Eigene Firma zuerst, danach die zugeordneten Mandanten."""
+    eigene = session.get(Firma, current.firma_id)
     ergebnis = []
     if eigene:
         ergebnis.append({"firma_id": eigene.id, "name": eigene.name, "eigene": True})
     # Auch der Superadmin sieht in den Modulen nur seine eigene Firma und
     # ausdruecklich zugeordnete Mandanten - sonst stuende dort jede Firma.
     zuordnungen = session.exec(
-        select(Mandant).where(Mandant.inhaber_firma_id == heim)).all()
+        select(Mandant).where(Mandant.inhaber_firma_id == current.firma_id)).all()
     for z in zuordnungen:
         f = session.get(Firma, z.mandant_firma_id)
         if f:
@@ -3245,18 +3194,16 @@ def mandant_hinzufuegen(data: MandantHinzuRequest,
         ziel = session.get(Firma, nutzer.firma_id) if nutzer else None
     if ziel is None:
         raise HTTPException(status_code=404, detail="Firma nicht gefunden")
-    # Auch hier zaehlt das eigene Konto, nicht der geoeffnete Betrieb.
-    heim = konto_firma_id(current, session)
-    if ziel.id == heim:
+    if ziel.id == current.firma_id:
         raise HTTPException(status_code=400, detail="Das ist die eigene Firma")
     schon = session.exec(select(Mandant).where(
-        Mandant.inhaber_firma_id == heim,
+        Mandant.inhaber_firma_id == current.firma_id,
         Mandant.mandant_firma_id == ziel.id)).first()
     if schon:
         raise HTTPException(status_code=409, detail="Diese Firma ist bereits zugeordnet")
     if not _is_superadmin(current):
-        _grenze_pruefen(session, heim)
-    session.add(Mandant(inhaber_firma_id=heim, mandant_firma_id=ziel.id))
+        _grenze_pruefen(session, current.firma_id)
+    session.add(Mandant(inhaber_firma_id=current.firma_id, mandant_firma_id=ziel.id))
     session.commit()
     return {"ok": True, "firma_id": ziel.id, "name": ziel.name}
 
@@ -3279,12 +3226,8 @@ def mandant_neu(data: MandantNeuRequest,
     """Neue Firma anlegen und sofort dem eigenen Konto als Mandant zuordnen."""
     if not darf_mandanten_fuehren(current, session):
         raise HTTPException(status_code=403, detail="Dein Konto darf keine Mandanten fuehren")
-    # Die neue Firma gehoert an das eigene Konto - auch wenn gerade ein anderer
-    # Betrieb geoeffnet ist. Sonst haengt sie unter dem geoeffneten Betrieb und
-    # ist vom eigenen Konto aus nicht mehr erreichbar.
-    heim = konto_firma_id(current, session)
     if not _is_superadmin(current):
-        _grenze_pruefen(session, heim)
+        _grenze_pruefen(session, current.firma_id)
     name = (data.firma_name or "").strip()
     email = (data.email or "").strip().lower()
     if not name:
@@ -3329,7 +3272,7 @@ def mandant_neu(data: MandantNeuRequest,
     session.add(User(email=email, password_hash=hash_password(passwort),
                      firma_id=firma.id, passwort_temporaer=ohne_zugang,
                      rolle=ROLLE_INHABER))
-    session.add(Mandant(inhaber_firma_id=heim, mandant_firma_id=firma.id))
+    session.add(Mandant(inhaber_firma_id=current.firma_id, mandant_firma_id=firma.id))
     session.commit()
     return {"ok": True, "firma_id": firma.id, "name": firma.name,
             "eigener_zugang": not ohne_zugang}
@@ -3349,7 +3292,7 @@ def mandant_entfernen(data: MandantEntfernenRequest,
         raise HTTPException(status_code=403,
                             detail="Zuordnungen kann nur der Superadmin loesen")
     z = session.exec(select(Mandant).where(
-        Mandant.inhaber_firma_id == konto_firma_id(current, session),
+        Mandant.inhaber_firma_id == current.firma_id,
         Mandant.mandant_firma_id == data.firma_id)).first()
     if z is None:
         raise HTTPException(status_code=404, detail="Zuordnung nicht gefunden")
@@ -3464,18 +3407,12 @@ def mitarbeiter_anlegen(data: MitarbeiterRequest,
                         x_mandant: Optional[int] = Header(default=None, alias="X-Mandant"),
                         current: User = Depends(braucht("mitarbeiter")),
                         session: Session = Depends(get_session)):
-    # Stand der Betrieb in der Anfrage, hat der Benutzer ihn in der Auswahl
-    # angeklickt - dann muss der Mitarbeiter genau dort landen oder es gibt
-    # eine Fehlermeldung. Kam er nur aus dem X-Mandant-Kopf, ist es der zuletzt
-    # geoeffnete Betrieb, und ein stilles Ausweichen bleibt in Ordnung.
-    gewaehlt = data.firma_id is not None
     if data.firma_id is None and x_mandant is not None:
         data.firma_id = x_mandant
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
-    ziel = _ziel_firma(current, session, getattr(data, "firma_id", None),
-                       ausdruecklich=gewaehlt)
+    ziel = _ziel_firma(current, session, getattr(data, "firma_id", None))
     # Doppelten Namen in derselben Firma verhindern
     exists = session.exec(
         select(Mitarbeiter).where(Mitarbeiter.firma_id == ziel,
@@ -3510,44 +3447,6 @@ def mitarbeiter_aendern(ma_id: int, data: MitarbeiterRequest,
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
-
-    # ── In einen anderen Betrieb umhaengen ──────────────────────────────
-    # Gedacht als Reparatur: solange ein Fehler Mitarbeiter im falschen
-    # Betrieb ablegen konnte, muss man sie ohne Neuanlage zurechtruecken
-    # koennen. Erlaubt ist das nur, solange am Mitarbeiter noch nichts
-    # haengt - sonst blieben Vorgaenge und Fahrerzugang im alten Betrieb
-    # zurueck und zeigten ins Leere.
-    umzug = (data.firma_id is not None and data.firma_id != m.firma_id)
-    if umzug:
-        neue_firma = _ziel_firma(current, session, data.firma_id, ausdruecklich=True)
-        offene = session.exec(select(Vorgang).where(
-            Vorgang.mitarbeiter_id == m.id)).all()
-        if offene:
-            raise HTTPException(
-                status_code=409,
-                detail=f"„{m.name}“ hat schon {len(offene)} Vorgänge in "
-                       f"„{session.get(Firma, m.firma_id).name}“. Ein Wechsel des "
-                       "Betriebs würde sie dort zurücklassen. Storniere und lösche "
-                       "die Vorgänge zuerst, oder lege den Mitarbeiter neu an.")
-        zugang = session.exec(select(User).where(User.mitarbeiter_id == m.id)).first()
-        if zugang:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Für „{m.name}“ gibt es einen Fahrerzugang ({zugang.email}). "
-                       "Entferne den Zugang zuerst, dann lässt sich der Betrieb wechseln.")
-        doppelt = session.exec(select(Mitarbeiter).where(
-            Mitarbeiter.firma_id == neue_firma, Mitarbeiter.name == name,
-            Mitarbeiter.id != m.id)).first()
-        if doppelt:
-            raise HTTPException(
-                status_code=409,
-                detail=f"In „{session.get(Firma, neue_firma).name}“ gibt es "
-                       f"„{name}“ bereits.")
-        alt_name = session.get(Firma, m.firma_id)
-        m.firma_id = neue_firma
-        print(f"Mitarbeiter {m.id} ({name}) verschoben: "
-              f"{alt_name.name if alt_name else m.firma_id} -> "
-              f"{session.get(Firma, neue_firma).name}", flush=True)
     # bei Umbenennung Dopplung prüfen
     if name != m.name:
         dup = session.exec(
