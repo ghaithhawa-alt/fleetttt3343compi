@@ -497,13 +497,71 @@ from pwdlib import PasswordHash
 
 
 # --- Passwoerter ---
-_pwd = PasswordHash.recommended()
+# Neue Passwoerter werden mit Argon2 gespeichert. Aeltere Konten koennen noch
+# einen bcrypt-Hash haben - der wird weiter akzeptiert, sonst kaeme niemand
+# mehr hinein, der sein Konto vor der Umstellung angelegt hat.
+def _pruefstelle() -> PasswordHash:
+    hasher = []
+    try:
+        from pwdlib.hashers.argon2 import Argon2Hasher
+        hasher.append(Argon2Hasher())
+    except Exception as fehler:      # pragma: no cover - fehlende Abhaengigkeit
+        print(f"WARNUNG: Argon2 nicht verfuegbar ({fehler}).", flush=True)
+    try:
+        from pwdlib.hashers.bcrypt import BcryptHasher
+        hasher.append(BcryptHasher())
+    except Exception:
+        # bcrypt ist nur fuer alte Hashes noetig. Fehlt es, laeuft alles
+        # weiter - nur sehr alte Konten muessten ihr Passwort neu setzen.
+        print("Hinweis: bcrypt nicht installiert - sehr alte Passwoerter "
+              "koennen nicht geprueft werden.", flush=True)
+    if not hasher:
+        return PasswordHash.recommended()
+    return PasswordHash(tuple(hasher))
+
+
+_pwd = _pruefstelle()
+
 
 def hash_password(plain: str) -> str:
     return _pwd.hash(plain)
 
+
+def _hash_lesbar(hashed: str) -> bool:
+    """Kann die aktuelle Bibliothek diesen gespeicherten Hash ueberhaupt lesen?
+
+    Wichtig fuer die Fehlersuche: ein nicht lesbarer Hash sieht sonst aus wie
+    ein falsches Passwort, ist aber ein ganz anderes Problem - das Konto
+    kommt mit KEINEM Passwort mehr hinein.
+    """
+    if not hashed:
+        return False
+    try:
+        _pwd.verify("pruefung-ob-lesbar", hashed)
+        return True
+    except Exception:
+        return False
+
+
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd.verify(plain, hashed)
+    """Prueft ein Passwort - und wirft dabei NIEMALS.
+
+    pwdlib meldet einen unbekannten Hash mit einer Ausnahme, nicht mit False.
+    Ungefangen wird daraus ein Serverfehler 500 auf der Anmeldeseite: der
+    Benutzer sieht nur "Fehler 500" und kann nichts tun, obwohl eigentlich
+    nur sein gespeicherter Hash nicht lesbar ist. Deshalb hier abfangen,
+    "passt nicht" zurueckgeben - und den Grund ins Protokoll schreiben,
+    damit man ihn ueberhaupt findet.
+    """
+    if not plain or not hashed:
+        return False
+    try:
+        return _pwd.verify(plain, hashed)
+    except Exception as fehler:
+        print(f"Passwort nicht pruefbar ({type(fehler).__name__}): gespeicherter "
+              f"Hash beginnt mit {str(hashed)[:12]!r}, Laenge {len(str(hashed))}. "
+              "Das Konto braucht ein neues Passwort.", flush=True)
+        return False
 
 # --- JWT-Token ---
 ALGORITHM = "HS256"
@@ -1377,6 +1435,7 @@ async def lifespan(app: FastAPI):
     _vorgaenge_modul_nachtragen()
     _vorgangswochen_nachtragen()
     _superadmin_anlegen()
+    _passwoerter_pruefen()
     print("FleetCompliance ist bereit.", flush=True)
     yield
 
@@ -1594,6 +1653,24 @@ def _superadmin_anlegen():
     with Session(engine) as s:
         vorhanden = s.exec(select(User).where(User.email == SUPERADMIN_EMAIL)).first()
         if vorhanden:
+            # Ein vorhandenes Konto wird nicht angefasst - mit EINER Ausnahme:
+            # wenn sein gespeichertes Passwort nicht mehr lesbar ist. Dann
+            # kaeme niemand mehr hinein, und ausgerechnet der Superadmin kann
+            # sich kein Einmal-Passwort ausstellen lassen. Wer die Variablen
+            # in Railway setzen kann, hat ohnehin die volle Kontrolle - das
+            # ist also kein zusaetzliches Risiko, aber ein Rueckweg.
+            if not _hash_lesbar(vorhanden.password_hash):
+                if len(SUPERADMIN_PASSWORD) >= 8:
+                    vorhanden.password_hash = hash_password(SUPERADMIN_PASSWORD)
+                    s.add(vorhanden); s.commit()
+                    print("ACHTUNG: Das gespeicherte Passwort des Superadmin war "
+                          "nicht mehr lesbar und wurde auf SUPERADMIN_PASSWORD "
+                          "zurueckgesetzt.", flush=True)
+                else:
+                    print("ACHTUNG: Das gespeicherte Passwort des Superadmin ist "
+                          "nicht lesbar. Setze SUPERADMIN_PASSWORD (mindestens 8 "
+                          "Zeichen) und starte neu - dann wird es erneuert.",
+                          flush=True)
             return
         if len(SUPERADMIN_PASSWORD) < 8:
             print("Hinweis: Superadmin-Konto fehlt noch. Zum automatischen Anlegen "
@@ -1611,6 +1688,30 @@ def _superadmin_anlegen():
                    firma_id=firma.id, rolle=ROLLE_INHABER, name="Superadmin"))
         s.commit()
         print(f"Superadmin-Konto angelegt: {SUPERADMIN_EMAIL}", flush=True)
+
+
+def _passwoerter_pruefen():
+    """Meldet beim Start, wenn gespeicherte Passwoerter nicht lesbar sind.
+
+    Ohne diese Zeile aeussert sich so ein Konto nur als "Fehler 500" beim
+    Anmelden - und man sucht an der voellig falschen Stelle. Geprueft wird
+    nur das Format, nie ein Passwort selbst.
+    """
+    try:
+        with Session(engine) as s:
+            alle = s.exec(select(User)).all()
+            kaputt = [u for u in alle if not _hash_lesbar(u.password_hash)]
+        if kaputt:
+            print("ACHTUNG: %d von %d Konten haben ein Passwort, das nicht "
+                  "gelesen werden kann. Betroffen: %s. Diese Konten brauchen "
+                  "ein neues Passwort (Passwort vergessen bzw. Einmal-Passwort "
+                  "ueber die Verwaltung)."
+                  % (len(kaputt), len(alle),
+                     ", ".join(u.email for u in kaputt[:10])), flush=True)
+        else:
+            print("Passwoerter: alle %d Konten lesbar." % len(alle), flush=True)
+    except Exception as fehler:      # darf den Start nie verhindern
+        print(f"Passwortpruefung uebersprungen: {type(fehler).__name__}", flush=True)
 
 
 def _vorlagen_anlegen():

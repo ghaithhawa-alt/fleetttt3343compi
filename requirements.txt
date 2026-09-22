@@ -1,10 +1,22 @@
+# Obergrenzen sind Absicht: Railway installiert bei jedem Deploy neu. Ohne
+# Obergrenze kann dabei eine neue Fassung einer Bibliothek hereinkommen, die
+# sich anders verhaelt - und dann laeuft plötzlich etwas nicht mehr, ohne dass
+# am eigenen Code eine Zeile geaendert wurde.
 fastapi>=0.115,<1.0
-uvicorn[standard]>=0.30
-sqlmodel>=0.0.14
-pyjwt>=2.8
-pwdlib[argon2]>=0.2
-python-multipart>=0.0.9
-python-dotenv>=1.0
-psycopg[binary]>=3.1
-reportlab>=4.0
-pillow>=10.0
+uvicorn[standard]>=0.30,<1.0
+# WICHTIG, nicht anheben ohne Test: ab 0.0.45 verlangt sqlmodel Zeitstempel
+# MIT Zeitzone. Der Code speichert sie ohne (datetime.utcnow), und die
+# bestehenden Spalten in der Datenbank sind ebenfalls ohne Zeitzone angelegt.
+# Mit 0.0.45 schlug deshalb jede Anmeldung mit "Fehler 500" fehl - das
+# Anmelden schreibt den Zeitpunkt der letzten Anmeldung.
+sqlmodel>=0.0.14,<0.0.45
+pyjwt>=2.8,<3.0
+# bcrypt gehoert dazu: Konten aus der Zeit vor der Umstellung auf Argon2
+# haben noch einen bcrypt-Hash. Ohne dieses Paket koennen sie sich nicht
+# mehr anmelden.
+pwdlib[argon2,bcrypt]>=0.2,<0.4
+python-multipart>=0.0.9,<1.0
+python-dotenv>=1.0,<2.0
+psycopg[binary]>=3.1,<4.0
+reportlab>=4.0,<5.0
+pillow>=10.0,<12.0
