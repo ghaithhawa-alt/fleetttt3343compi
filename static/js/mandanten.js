@@ -849,7 +849,38 @@
      Zeitnachweis: znFirmaInput / znAnschriftInput
      Lohn:         lnFirmaInput
      Fahrtenbuch:  firmaInput / betriebssitz / lat / lon */
+  /* Der Lizenz-Code im Dashboard fuellt die Firmenfelder beim Laden mit dem
+     Namen des eigenen Kontos - und zwar aus einer eigenen, spaeter
+     eintreffenden Abfrage. Je nachdem, was zuerst da ist, ueberschreibt er
+     den Betriebsnamen wieder. Deshalb in den ersten Sekunden ein paarmal
+     nachsehen und den Namen des gewaehlten Betriebs wiederherstellen.
+     Danach hoert das auf - wer von Hand etwas eintippt, soll in Ruhe
+     gelassen werden. */
+  function namenNachziehen() {
+    if (!aktiverMandant()) return;
+    var versuche = 0;
+    var timer = setInterval(function () {
+      if (++versuche > 20 || !aktiverMandant()) { clearInterval(timer); return; }
+      var soll = aktiverName();
+      if (!soll) return;
+      ["znFirmaInput", "lnFirmaInput", "bkFirmaInput", "firmaInput"].forEach(function (id) {
+        var e = document.getElementById(id);
+        if (e && e.value !== soll) {
+          e.value = soll;
+          try { e.dispatchEvent(new Event("change", { bubbles: true })); } catch (x) {}
+        }
+      });
+    }, 250);
+  }
+
   function profilInModule() {
+    /* Ist ein Betrieb ausgewaehlt, ist DESSEN Profil die Wahrheit - dann wird
+       ohne Ruecksicht gesetzt. Vorher stand in den Feldern bereits der Name
+       des eigenen Kontos (der Lizenz-Code fuellt sie beim Laden), und die
+       Schonung unten liess ihn stehen. Folge: der Umschalter zeigte den
+       richtigen Betrieb, im ausgedruckten Stundennachweis stand aber der Name
+       des Gruppenkontos. */
+    var mandantAktiv = !!aktiverMandant();
     fetch("/me/firmenprofil", { headers: authHeaders() })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
@@ -857,7 +888,10 @@
         function setzen(id, wert) {
           var e = document.getElementById(id);
           if (!e || !wert) return;
-          if (e.value && e.value.trim()) return;      // vorhandene Eingabe nicht ueberschreiben
+          // Ohne aktiven Betrieb bleibt es dabei: eine vorhandene Eingabe
+          // koennte von Hand stammen und wird nicht angetastet.
+          if (!mandantAktiv && e.value && e.value.trim()) return;
+          if (e.value === wert) return;
           e.value = wert;
           try { e.dispatchEvent(new Event("change", { bubbles: true })); } catch (x) {}
         }
@@ -911,6 +945,7 @@
     umschalterEinbauen();
     verwaltenKnoepfeAusblenden();
     profilInModule();
+    namenNachziehen();
     // Die Modul-Funktionen stehen evtl. erst spaeter bereit
     var v = 0;
     var t = setInterval(function () {

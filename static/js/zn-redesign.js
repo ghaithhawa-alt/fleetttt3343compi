@@ -118,6 +118,90 @@
     startHoursToggle();
   }
 
+  /* ── Firmenkopf im Ausdruck ──────────────────────────────────────────
+     Oben auf dem Stundennachweis standen bisher immer Firmenname und
+     Anschrift. Das ist nicht immer gewollt - viele Nachweise sollen nur den
+     Mitarbeiter und den Monat zeigen. Deshalb ein Schalter, und zwar
+     standardmaessig AUS.
+
+     Umgesetzt ohne Eingriff in dashboard.html: die Export-Funktion liest den
+     Kopf aus den beiden Feldern und laesst ihn weg, wenn der Firmenname leer
+     ist (inklusive passendem Tabellenbeginn). Genau das nutzen wir - die
+     Felder werden fuer die Dauer des Exports geleert und danach exakt so
+     wiederhergestellt, wie sie waren. */
+  var KOPF_SCHLUESSEL = "fc_zn_firmenkopf";
+
+  function kopfAn() {
+    try { return localStorage.getItem(KOPF_SCHLUESSEL) === "1"; } catch (e) { return false; }
+  }
+  function kopfSetzen(an) {
+    try { localStorage.setItem(KOPF_SCHLUESSEL, an ? "1" : "0"); } catch (e) {}
+  }
+
+  function kopfSchalterEinbauen() {
+    if (document.getElementById("znKopfSchalter")) return;
+    var anschrift = document.getElementById("znAnschriftInput");
+    var feld = anschrift && anschrift.closest ? anschrift.closest(".field") : null;
+    if (!feld) return;
+
+    var box = document.createElement("div");
+    box.className = "field zn-kopf-feld";
+    box.innerHTML =
+      '<label class="zn-kopf-zeile">'
+      + '<input type="checkbox" id="znKopfSchalter">'
+      + '<span>Firmenkopf im Ausdruck</span>'
+      + '</label>'
+      + '<div class="zn-kopf-hinweis">Aus: der Nachweis beginnt direkt mit dem '
+      + 'Namen des Mitarbeiters.</div>';
+    feld.parentNode.insertBefore(box, feld.nextSibling);
+
+    var schalter = document.getElementById("znKopfSchalter");
+    schalter.checked = kopfAn();
+    schalter.onchange = function () { kopfSetzen(schalter.checked); };
+  }
+
+  /* Die Export-Funktion umschliessen, statt sie zu ersetzen. */
+  function exportUmschliessen() {
+    if (typeof window.znExportPDF !== "function" || window.znExportPDF.fcKopf) return true;
+    var original = window.znExportPDF;
+    var neu = function () {
+      if (kopfAn()) return original.apply(this, arguments);
+      var felder = ["znFirmaInput", "znAnschriftInput"];
+      var gemerkt = felder.map(function (id) {
+        var e = document.getElementById(id);
+        return { el: e, wert: e ? e.value : null };
+      });
+      gemerkt.forEach(function (g) { if (g.el) g.el.value = ""; });
+      try {
+        return original.apply(this, arguments);
+      } finally {
+        /* Auch wenn der Export unterwegs abbricht: die Felder muessen zurueck,
+           sonst steht der Betrieb anschliessend nicht mehr in der Konfiguration. */
+        gemerkt.forEach(function (g) { if (g.el) g.el.value = g.wert; });
+      }
+    };
+    neu.fcKopf = true;
+    window.znExportPDF = neu;
+    return true;
+  }
+
+  function kopfStart() {
+    kopfSchalterEinbauen();
+    /* Beides kann spaeter bereitstehen - kurz nachfassen, dann aufhoeren. */
+    var v = 0;
+    var t = setInterval(function () {
+      kopfSchalterEinbauen();
+      exportUmschliessen();
+      if (++v > 40) clearInterval(t);
+    }, 150);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", kopfStart);
+  } else {
+    kopfStart();
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
