@@ -144,20 +144,52 @@
     var feld = anschrift && anschrift.closest ? anschrift.closest(".field") : null;
     if (!feld) return;
 
+    /* BEWUSST NICHT die Klasse "field": dort gilt `.field input {width:100%}`,
+       das blaeht eine Ankreuzbox zu einem leeren Kasten auf - sie sieht dann
+       aus wie ein Eingabefeld und nicht wie ein Schalter.
+       Stattdessen der Schiebeschalter, den das Dashboard schon mitbringt
+       (.zn-toggle, derselbe wie bei "Tag-Verschiebung"). */
     var box = document.createElement("div");
-    box.className = "field zn-kopf-feld";
+    box.className = "zn-kopf-feld";
     box.innerHTML =
       '<label class="zn-kopf-zeile">'
-      + '<input type="checkbox" id="znKopfSchalter">'
-      + '<span>Firmenkopf im Ausdruck</span>'
+      + '<span class="zn-toggle">'
+      +   '<input type="checkbox" id="znKopfSchalter">'
+      +   '<span class="slider"></span>'
+      + '</span>'
+      + '<span class="zn-kopf-text">Firmenkopf im Ausdruck</span>'
       + '</label>'
-      + '<div class="zn-kopf-hinweis">Aus: der Nachweis beginnt direkt mit dem '
-      + 'Namen des Mitarbeiters.</div>';
+      + '<div class="zn-kopf-hinweis" id="znKopfHinweis"></div>';
     feld.parentNode.insertBefore(box, feld.nextSibling);
 
     var schalter = document.getElementById("znKopfSchalter");
+    var hinweis = document.getElementById("znKopfHinweis");
+
+    /* Der Hinweis sagt, was der aktuelle Stand bedeutet - sonst steht dort
+       "Aus: ..." obwohl der Schalter an ist. */
+    function hinweisSetzen() {
+      if (!hinweis) return;
+      if (schalter.checked) {
+        var firma = document.getElementById("znFirmaInput");
+        var name = firma && firma.value ? firma.value.trim() : "";
+        hinweis.textContent = name
+          ? "An: „" + name + "“ und die Anschrift stehen oben auf dem Nachweis."
+          : "An: Betrieb und Anschrift stehen oben auf dem Nachweis.";
+      } else {
+        hinweis.textContent =
+          "Aus: der Nachweis beginnt direkt mit dem Namen des Mitarbeiters.";
+      }
+    }
+
     schalter.checked = kopfAn();
-    schalter.onchange = function () { kopfSetzen(schalter.checked); };
+    hinweisSetzen();
+    schalter.onchange = function () {
+      kopfSetzen(schalter.checked);
+      hinweisSetzen();
+    };
+    /* Wechselt der Betrieb, soll der Hinweis den neuen Namen zeigen. */
+    var firmaFeld = document.getElementById("znFirmaInput");
+    if (firmaFeld) firmaFeld.addEventListener("change", hinweisSetzen);
   }
 
   /* Die Export-Funktion umschliessen, statt sie zu ersetzen. */
