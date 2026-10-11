@@ -2678,6 +2678,8 @@ def _dashboard_html() -> str:
         f'<link rel="stylesheet" href="/app/mitarbeiter.css?v={_version("mitarbeiter.css")}">'
         f'<script src="/app/shell.js?v={_version("shell.js")}" defer></script>'
         f'<script src="/app/zn-redesign.js?v={_version("zn-redesign.js")}" defer></script>'
+        # Schalter "Firmenkopf im Ausdruck" fuer Zeitnachweis UND Fahrtenbuch.
+        f'<script src="/app/kopf-schalter.js?v={_version("kopf-schalter.js")}" defer></script>'
         f'<script src="/app/mitarbeiter.js?v={_version("mitarbeiter.js")}" defer></script>'
         f'<script src="/app/bridge.js?v={_version("bridge.js")}" defer></script>'
         f'<link rel="stylesheet" href="/app/settings.css?v={_version("settings.css")}">'
