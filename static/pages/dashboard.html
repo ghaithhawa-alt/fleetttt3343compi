@@ -4500,7 +4500,7 @@
               <svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>
             </div>
             <h3>Compliance</h3>
-            <p>Fahrtenbuch auf PBefG-konformitaet pruefen und Korrekturen erstellen.</p>
+            <p>Fahrtenbuch pruefen und Korrekturen erstellen.</p>
           </div>
         </div>
       </div>
@@ -4588,7 +4588,7 @@
             <div class="loading-pct" id="progressPct">0%</div>
           </div>
           <div class="loading-title">Fahrtenbuch wird analysiert</div>
-          <div class="loading-subtitle">Bitte warten — dies kann einige Sekunden dauern</div>
+          <div class="loading-subtitle">Bitte warten — dies kann einige Minuten dauern</div>
           <div class="loading-eta">Geschätzte Restzeit: <span class="loading-eta-value" id="progressEta">— s</span></div>
           <div class="progress-bar"><div class="progress-fill"></div></div>
           <div class="loading-steps">
@@ -8585,7 +8585,7 @@ function exportExcel(){
 
     /* Workbook erstellen + Sheet hinzufuegen */
     var wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,"Fahrtenbuch korrigiert");
+    XLSX.utils.book_append_sheet(wb,ws,"Sheet1");
 
     /* Einheitlicher Dateiname: <Firma>_Fahrtenbuch_korrigiert_<Datum>.xlsx */
     var fname=buildExportFilename("xlsx");
@@ -8675,7 +8675,7 @@ function exportOriginalPDF(){
                   3:{cellWidth:COL_W[3]},4:{cellWidth:COL_W[4]},5:{cellWidth:COL_W[5]},
                   6:{cellWidth:COL_W[6],halign:"right"},7:{cellWidth:COL_W[7]},8:{cellWidth:COL_W[8]}},
     margin:{left:10,right:10,top:14},
-    didDrawPage:function(){drawHdr("Fahrtenbuch");}
+    didDrawPage:function(){drawHdr("");}    /////////////*Hier kann das Pdf Kopf geändert werden//////////////
   });
   /* Dateiname: <Firma>_Fahrtenbuch_original_<Datum>.pdf */
   var datum=new Date().toISOString().slice(0,10);
